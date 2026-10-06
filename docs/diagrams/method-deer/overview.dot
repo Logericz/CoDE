@@ -1,0 +1,30 @@
+digraph DEER {
+  graph [rankdir=TB, bgcolor="#F8FAFC", pad=0.35, nodesep=0.45, ranksep=0.42,
+    fontname="PingFang SC", fontsize=26, fontcolor="#0F172A", labelloc=t,
+    label="method_deer()：从旧回答中寻找可以提前结束的位置\n总流程 · 依据 2026-10-06 本地源码"];
+  node [shape=box, style="rounded,filled", fillcolor="white", color="#CBD5E1", penwidth=1.4,
+    fontname="PingFang SC", fontsize=17, fontcolor="#0F172A", margin="0.20,0.13"];
+  edge [color="#64748B", penwidth=1.5, arrowsize=0.75, fontname="PingFang SC", fontsize=14, fontcolor="#475569"];
+  input [label="输入：题目 + 已有回答记录 + 模型 / 分词器 + 控制参数", fillcolor="#E0F2FE", color="#0284C7"];
+  prep [label="① 准备 token 与候选检查位置  [105–137]\n题目 → prompt_ids；旧回答 → sample_response_ids\n匹配候选 token ID → stop_token_idxs\n准备 trial_answer_ids 与 final_answer_ids"];
+  init [label="② 初始化  [139–142]\nprob_checks = []；prev_stop_token_idx = 0\n按 cp_cache 准备前缀 KV 缓存"];
+  next [shape=diamond, style=filled, fillcolor="#EDE9FE", color="#8B5CF6", fontsize=16,
+    label="③ 还有下一个\n检查位置吗？\n[145]"];
+  build [label="④ 为当前检查位置准备输入 / 缓存  [146–173]\n题目 + 检查位置之前的推理 + 试答前缀\ncp_cache 两条路径见第二张图", fillcolor="#E0F2FE", color="#0284C7"];
+  probe [label="⑤ 调用 calcu_max_probs_w_kv()\n生成一次试答，并返回 prob_result\n试答文本 / token 概率 / 聚合分数 / 结束标记", fillcolor="#DBEAFE", color="#3B82F6"];
+  record [label="⑥ 保存本轮检查到内存列表  [175]\nprob_checks.append(prob_result)"];
+  gate [shape=diamond, style=filled, fillcolor="#FEF3C7", color="#D97706", fontsize=16,
+    label="分数严格大于 threshold\n并且\newt=False 或试答已出现结束标记？\n[179–182]"];
+  finalgen [label="⑦ 满足条件：另行生成最终回答  [186–196]\n题目 + 当前推理前缀 + final_answer_ids\n调用 model.generate()，不是直接返回试答", fillcolor="#DCFCE7", color="#16A34A"];
+  early [label="返回：stopped_early = True  [202–210]\nresponse = 保留推理 + 正式答案前缀 + 新生成内容\n同时返回 prob_checks、阈值、token 计数等", fillcolor="#DCFCE7", color="#16A34A"];
+  fallback [label="没有检查点，或所有检查均未触发早停\n返回：stopped_early = False  [215–226]\nresponse = 前置阶段的原回答\n保留已完成的 prob_checks", fillcolor="#F1F5F9", color="#64748B"];
+  returned [label="函数结束：把字典交回调用者\n判分和写入磁盘属于外层程序", shape=box, fillcolor="#0F172A", color="#0F172A", fontcolor="white"];
+  input -> prep -> init -> next;
+  next -> build [label="有：取 stop_token_idx"];
+  next -> fallback [label="没有", minlen=2];
+  build -> probe -> record -> gate;
+  gate -> next [label="不满足：检查下一个位置", color="#D97706", fontcolor="#B45309", constraint=false];
+  gate -> finalgen [label="满足", color="#16A34A"];
+  finalgen -> early -> returned;
+  fallback -> returned;
+}

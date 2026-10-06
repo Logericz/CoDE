@@ -1,0 +1,30 @@
+digraph Cache {
+  graph [rankdir=TB, bgcolor="#F8FAFC", pad=0.35, nodesep=0.5, ranksep=0.45,
+    fontname="PingFang SC", fontsize=26, fontcolor="#0F172A", labelloc=t,
+    label="展开第④步：两种方式准备同一个检查点的上下文\ncp_cache 控制检查点之间的前缀 KV 复用"];
+  node [shape=box, style="rounded,filled", fillcolor="white", color="#CBD5E1", penwidth=1.4,
+    fontname="PingFang SC", fontsize=17, fontcolor="#0F172A", margin="0.20,0.15"];
+  edge [color="#64748B", penwidth=1.5, arrowsize=0.75, fontname="PingFang SC", fontsize=14, fontcolor="#475569"];
+  cp [shape=diamond, style=filled, fillcolor="#EDE9FE", color="#8B5CF6", label="cp_cache？  [146]"];
+  full [label="False：当前教学配置  [171]\n每个检查点重新拼出完整输入\nprompt_ids\n+ sample_response_ids[:stop_token_idx]\n+ trial_answer_ids[0].tolist()", fillcolor="#E0F2FE", color="#0284C7"];
+  choose [shape=diamond, style=filled, fillcolor="#EDE9FE", color="#8B5CF6", fontsize=16,
+    label="True：需要更新前缀缓存\nprev_stop_token_idx == 0？\n[148]"];
+  first [label="是：输入题目 + 当前推理前缀  [149]\nprompt_ids + sample_response_ids[:stop_token_idx]"];
+  delta [label="否：只输入新增加的旧推理片段  [151]\nsample_response_ids[prev_stop_token_idx:stop_token_idx]"];
+  prefill [label="更新位置并前向计算  [152–159]\nprev_stop_token_idx = stop_token_idx\n缓存 → 模型设备；model(...) 更新 KV\n更新后的前缀缓存 → CPU 保存", fillcolor="#F3E8FF", color="#9333EA"];
+  nocachecall [label="调用试答函数  [173]\n输入：完整 token 张量\n传入的前缀缓存：None", fillcolor="#E0F2FE", color="#0284C7"];
+  cachecall [label="调用试答函数  [166]\n输入：trial_answer_ids\n另传入：已有题目和推理的 KV 缓存", fillcolor="#F3E8FF", color="#9333EA"];
+  result [label="两条路径均返回 prob_result\n回到总流程：记录 → 判断是否提前停止", fillcolor="#DCFCE7", color="#16A34A"];
+  note [label="注意：False 不代表试答内部完全禁用 KV。\n试答函数内部仍会逐 token 更新自己的 KV；\nTrue 路径还会复制传入缓存，保护原推理前缀。", fillcolor="#FFF7ED", color="#FB923C", fontsize=16];
+  cp -> full [label="False", color="#0284C7"];
+  cp -> choose [label="True", color="#9333EA"];
+  choose -> first [label="是"];
+  choose -> delta [label="否"];
+  first -> prefill;
+  delta -> prefill;
+  full -> nocachecall;
+  prefill -> cachecall;
+  nocachecall -> result;
+  cachecall -> result;
+  result -> note [style=dashed, arrowhead=none];
+}
