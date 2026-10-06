@@ -1,0 +1,14 @@
+{
+  "audited_on": "2026-10-06",
+  "kind": "source_reading_only_no_new_experiment",
+  "repository_head_before_diagram_backfill": "aa120c29622747689b79146e56e5213b879d8ec7",
+  "upstream_base_commit": "b5081e7c2abe23bb1d19649421cc13522fee7c50",
+  "source_is_local_worktree": true,
+  "note": "Local annotated source may differ from the pinned commit. Diagram work did not modify upstream annotations. Hashes identify the actual files read.",
+  "files": {
+    "upstream/CoDE-Stop/method_prompts.py": "4a7c1623c5cc884ca39a75a3f49b64f60a94c20d4d93331e6dad255659c508e2",
+    "upstream/CoDE-Stop/models.py": "f6fea640da398ac793aedf3646f9f29cc1b197fd3a4192e661df9e736859c9c6",
+    "upstream/CoDE-Stop/inference.py": "96617cf26fdd47b3d9681ad62583b7f6d3fefc97e1b4f90deb0a97c0310c40af",
+    "src/diagnostic_core.py": "a15fa361886d2e428aa52e8792f530fbb7821d3f766aef4e65b1a13b5e771374"
+  }
+}

@@ -1,0 +1,23 @@
+digraph G {
+graph [rankdir=TB, bgcolor="#F8FAFC", pad=0.35, nodesep=0.32, ranksep=0.35, fontname="PingFang SC", fontsize=25, fontcolor="#0F172A", labelloc=t, label="01 · method_step_by_step()\n把一道题包装成消息，再取回回答"];
+node [shape=box, style="rounded,filled", fontname="PingFang SC", fontsize=17, fontcolor="#0F172A", penwidth=1.4, margin="0.18,0.12"];
+edge [color="#64748B", penwidth=1.4, arrowsize=0.7, fontname="PingFang SC", fontsize=14, fontcolor="#475569"];
+a [label="输入：model、tokenizer、sample、B\n只从 sample 取 question，参考答案不送入模型", shape=box, fillcolor="#E0F2FE", color="#0284C7"];
+b [label="content（字符串）\n题目 + 逐步推理要求 + 最终答案格式要求", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+c [label="messages（列表）\n[{role: user, content: content}]", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+d [label="模型名或路径包含 nemotron？", shape=diamond, fillcolor="#FEF3C7", color="#D97706"];
+e [label="在消息列表前加 system 消息\ndetailed thinking on", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+f [label="调用 models.py 的 generate()\n传入 messages、B；do_sample=True", shape=box, fillcolor="#EDE9FE", color="#8B5CF6"];
+g [label="取得 response（回答字符串）\n重新 encode → response_ids → len", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+h [label="返回字典\nresponse / messages / response_tokens / work\n这里 work = response_tokens", shape=box, fillcolor="#DCFCE7", color="#16A34A"];
+i [label="边界：只返回，不判分、不保存\n重新编码的 token 数不等同于实测耗时", shape=box, fillcolor="#F1F5F9", color="#64748B"];
+a -> b [label=""];
+b -> c [label=""];
+c -> d [label=""];
+d -> e [label="是"];
+d -> f [label="否"];
+e -> f [label=""];
+f -> g [label=""];
+g -> h [label=""];
+h -> i [label=""];
+}

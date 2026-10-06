@@ -1,0 +1,25 @@
+digraph G {
+graph [rankdir=TB, bgcolor="#F8FAFC", pad=0.35, nodesep=0.32, ranksep=0.35, fontname="PingFang SC", fontsize=25, fontcolor="#0F172A", labelloc=t, label="02 · models.generate()\n消息如何变成张量，再变成回答"];
+node [shape=box, style="rounded,filled", fontname="PingFang SC", fontsize=17, fontcolor="#0F172A", penwidth=1.4, margin="0.18,0.12"];
+edge [color="#64748B", penwidth=1.4, arrowsize=0.7, fontname="PingFang SC", fontsize=14, fontcolor="#475569"];
+a [label="输入：messages（列表）、B、模型与分词器\nreturn_full_text 默认 False", shape=box, fillcolor="#E0F2FE", color="#0284C7"];
+b [label="apply_chat_template(messages)\ntokenize=False；add_generation_prompt=True\n得到 prompt（字符串）", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+c [label="tokenizer(prompt, return_tensors=pt)\n得到 inputs：input_ids、attention_mask 等张量\n移到模型参数所在设备", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+d [label="构建 gen_kwargs\nmax_new_tokens=B + pad/eos ID + kwargs\n后面的 kwargs 可覆盖同名设置", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+e [label="torch.no_grad() 下调用 model.generate()\noutputs：输入 token + 新生成 token", shape=box, fillcolor="#EDE9FE", color="#8B5CF6"];
+f [label="return_full_text 为 True？", shape=diamond, fillcolor="#FEF3C7", color="#D97706"];
+g [label="取 outputs[0]\n保留输入前缀与新增部分", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+h [label="input_length = inputs[input_ids].shape[1]\n取 outputs[0][input_length:]\n只保留新增部分", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+i [label="tokenizer.decode(..., skip_special_tokens=True)\n返回 response（字符串）", shape=box, fillcolor="#DCFCE7", color="#16A34A"];
+j [label="B 是新增 token 上限，不是必须生成的长度\n教学例：输入120、总输出170 → 默认解码后50个位置", shape=box, fillcolor="#F1F5F9", color="#64748B"];
+a -> b [label=""];
+b -> c [label=""];
+c -> d [label=""];
+d -> e [label=""];
+e -> f [label=""];
+f -> g [label="是"];
+f -> h [label="否 / 默认"];
+g -> i [label=""];
+h -> i [label=""];
+i -> j [label=""];
+}

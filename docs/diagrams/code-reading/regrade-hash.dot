@@ -1,0 +1,20 @@
+digraph G {
+graph [rankdir=TB, bgcolor="#F8FAFC", pad=0.35, nodesep=0.32, ranksep=0.35, fontname="PingFang SC", fontsize=25, fontcolor="#0F172A", labelloc=t, label="07 · 重新判分与 SHA-256 复核\n证明哪些文件没变，而不是证明答案正确"];
+node [shape=box, style="rounded,filled", fontname="PingFang SC", fontsize=17, fontcolor="#0F172A", penwidth=1.4, margin="0.18,0.12"];
+edge [color="#64748B", penwidth=1.4, arrowsize=0.7, fontname="PingFang SC", fontsize=14, fontcolor="#475569"];
+a [label="已有 base.json 与 vanilla.json\n先确认终端在项目根目录，路径指向同一运行目录", shape=box, fillcolor="#E0F2FE", color="#0284C7"];
+b [label="重新判分前：sha256sum 两个生成文件\n把文件路径与哈希保存为 generation-before.sha256", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+c [label="执行 grade --run-dir ...\n读取原生成，重新抽取并判分\n更新 grading.json；不重新调用模型", shape=box, fillcolor="#EDE9FE", color="#8B5CF6"];
+d [label="sha256sum -c generation-before.sha256\n重新算当前文件哈希，与清单逐一比较", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+e [label="两个文件均显示 OK？", shape=diamond, fillcolor="#FEF3C7", color="#D97706"];
+f [label="支持的结论：\n重新判分前后，这两个文件的字节内容一致\n再对比判分状态和答案，检查重试结果", shape=box, fillcolor="#DCFCE7", color="#16A34A"];
+g [label="先检查路径、文件是否缺失或被修改\n保留错误信息与记录，查清差异", shape=box, fillcolor="#FEE2E2", color="#DC2626"];
+h [label="OK 不证明模型答案正确，也不证明已异地备份\n答案是否正确看判分；是否上传看远端文件核验\n单次哈希检查本身不证明所有重试逻辑永远无误", shape=box, fillcolor="#F1F5F9", color="#64748B"];
+a -> b [label=""];
+b -> c [label=""];
+c -> d [label=""];
+d -> e [label=""];
+e -> f [label="是"];
+e -> g [label="否"];
+f -> h [label=""];
+}

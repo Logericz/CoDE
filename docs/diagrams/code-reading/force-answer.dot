@@ -1,0 +1,34 @@
+digraph G {
+graph [rankdir=TB, bgcolor="#F8FAFC", pad=0.35, nodesep=0.32, ranksep=0.35, fontname="PingFang SC", fontsize=25, fontcolor="#0F172A", labelloc=t, label="04 · generic_forceans()\n保留一部分推理，给模型一个答案开头让它续写"];
+node [shape=box, style="rounded,filled", fontname="PingFang SC", fontsize=17, fontcolor="#0F172A", penwidth=1.4, margin="0.18,0.12"];
+edge [color="#64748B", penwidth=1.4, arrowsize=0.7, fontname="PingFang SC", fontsize=14, fontcolor="#475569"];
+a [label="读取前置记录中的 response 与 messages\n原回答 encode 后计数；预留量 M：数学50 / 代码300", shape=box, fillcolor="#E0F2FE", color="#0284C7"];
+b [label="原回答 token 数 < B − M？", shape=diamond, fillcolor="#FEF3C7", color="#D97706"];
+c [label="直接返回原回答；forced=False\nremainder、final_part 为空\n不调用模型补答", shape=box, fillcolor="#DCFCE7", color="#16A34A"];
+d [label="原回答拆成句子列表 sentences\n若仅一句，则改按双换行拆分", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+e [label="拼接剩余句子 → remainder\nencode → remainder_tokens\ntokens_left = B − len(remainder_tokens)", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+f [label="tokens_left ≥ M？", shape=diamond, fillcolor="#FEF3C7", color="#D97706"];
+g [label="删除列表末尾一句\nsentences = sentences[:-1]", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+h [label="还有句子？", shape=diamond, fillcolor="#FEF3C7", color="#D97706"];
+i [label="退出删减循环\n若列表耗尽：代码仍沿用最后一次计算值", shape=box, fillcolor="#F1F5F9", color="#64748B"];
+j [label="remainder 追加必要的 </think>\n再追加数学答案前缀或代码前缀\n数学前缀末尾为：\\boxed{", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+k [label="messages 经聊天模板 → question_prompt\n本次模型输入 prompt = question_prompt + remainder", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+l [label="分词、移到设备、调用 model.generate()\nmax_new_tokens=tokens_left；do_sample=True\n切掉本次输入后 decode → final_part", shape=box, fillcolor="#EDE9FE", color="#8B5CF6"];
+m [label="full_response = remainder + final_part\n返回字典；forced=True；此函数不保存文件", shape=box, fillcolor="#DCFCE7", color="#16A34A"];
+n [label="变量边界：full_response 不含 question_prompt\n示例：末尾 \\boxed{ + 新增 402} → \\boxed{402}\n计数细节：tokens_left 在追加标记/前缀之前计算\nresponse_tokens 也沿用追加前的 remainder_tokens", shape=box, fillcolor="#F1F5F9", color="#64748B"];
+a -> b [label=""];
+b -> c [label="是"];
+b -> d [label="否"];
+d -> e [label=""];
+e -> f [label=""];
+f -> g [label="否"];
+g -> h [label=""];
+h -> e [label="是"];
+h -> i [label="否"];
+f -> i [label="是"];
+i -> j [label=""];
+j -> k [label=""];
+k -> l [label=""];
+l -> m [label=""];
+m -> n [label=""];
+}

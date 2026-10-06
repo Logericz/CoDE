@@ -1,0 +1,27 @@
+digraph G {
+graph [rankdir=TB, bgcolor="#F8FAFC", pad=0.35, nodesep=0.32, ranksep=0.35, fontname="PingFang SC", fontsize=25, fontcolor="#0F172A", labelloc=t, label="06 · 教学脚本：run / grade / inspect\n生成记录与判分记录分开保存"];
+node [shape=box, style="rounded,filled", fontname="PingFang SC", fontsize=17, fontcolor="#0F172A", penwidth=1.4, margin="0.18,0.12"];
+edge [color="#64748B", penwidth=1.4, arrowsize=0.7, fontname="PingFang SC", fontsize=14, fontcolor="#475569"];
+a [label="scripts/single_question.py 的子命令\n实际逻辑：src/diagnostic_core.py", shape=box, fillcolor="#E0F2FE", color="#0284C7"];
+b [label="run\n检查环境、身份、依赖及已有记录\n仅在有待生成阶段时加载模型", shape=box, fillcolor="#EDE9FE", color="#8B5CF6"];
+c [label="execute_stage()：阶段文件已存在？", shape=diamond, fillcolor="#FEF3C7", color="#D97706"];
+d [label="验证记录与依赖哈希\n兼容则 reused；不兼容报错\n不覆盖旧生成", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+e [label="backend.run() 执行该阶段\n组装记录与哈希 → atomic_json\n先保存 base.json / vanilla.json 等", shape=box, fillcolor="#DCFCE7", color="#16A34A"];
+f [label="grade\n直接进入 grade_run()\n无需模型生成", shape=box, fillcolor="#EDE9FE", color="#8B5CF6"];
+g [label="grade_run()\n读取并核验已存在的阶段记录\ngrade_response() 判分 + 记录来源文件哈希\n写入 grading.json，随后打印结果", shape=box, fillcolor="#DCFCE7", color="#16A34A"];
+h [label="inspect\n进入 inspect_run()\n读取阶段记录及已保存判分", shape=box, fillcolor="#EDE9FE", color="#8B5CF6"];
+i [label="显示阶段完成 / 未运行 / 失败 / 无效等状态\n核对判分是否对应当前文件，过期则提示\n不生成、不重新判分、不写结果文件", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+j [label="本图是教学封装：先保存生成，再判分\n官方 inference.py：生成 → 判分 → 写 JSONL\ncompleted 是阶段执行状态，不自动等于答案正确", shape=box, fillcolor="#F1F5F9", color="#64748B"];
+a -> b [label="run"];
+a -> f [label="grade"];
+a -> h [label="inspect"];
+b -> c [label=""];
+c -> d [label="是"];
+c -> e [label="否"];
+d -> g [label="兼容复用后"];
+e -> g [label="保存成功后"];
+f -> g [label=""];
+h -> i [label=""];
+g -> j [label=""];
+i -> j [label=""];
+}

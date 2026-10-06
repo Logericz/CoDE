@@ -1,0 +1,30 @@
+digraph G {
+graph [rankdir=TB, bgcolor="#F8FAFC", pad=0.35, nodesep=0.32, ranksep=0.35, fontname="PingFang SC", fontsize=25, fontcolor="#0F172A", labelloc=t, label="03 · 官方 inference.py 主入口\n查表选方法 → 检查依赖 → 生成 → 判分 → 保存"];
+node [shape=box, style="rounded,filled", fontname="PingFang SC", fontsize=17, fontcolor="#0F172A", penwidth=1.4, margin="0.18,0.12"];
+edge [color="#64748B", penwidth=1.4, arrowsize=0.7, fontname="PingFang SC", fontsize=14, fontcolor="#475569"];
+a [label="命令行参数 args\nB = args.max_new_tokens", shape=box, fillcolor="#E0F2FE", color="#0284C7"];
+b [label="method_fn = METHOD_REGISTRY[args.method]\nstep-by-step → method_step_by_step 函数对象\n此时只是选函数，尚未生成", shape=box, fillcolor="#EDE9FE", color="#8B5CF6"];
+c [label="按 dataset 选择 validate_fn\n若用 LLM 判分：partial 预先绑定客户端等参数\n加载数据、模型；读取已处理项与依赖缓存", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+d [label="方法有依赖，但整份缓存为空？", shape=diamond, fillcolor="#FEF3C7", color="#D97706"];
+e [label="抛出 RuntimeError\n提示先运行前置方法", shape=box, fillcolor="#FEE2E2", color="#DC2626"];
+f [label="遍历 (sample_idx, rollout_idx)\n已处理项跳过；进入下一项", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+g [label="本项需要依赖，且缓存缺这一项？", shape=diamond, fillcolor="#FEF3C7", color="#D97706"];
+h [label="打印警告并跳过这一项\n继续处理下一项", shape=box, fillcolor="#F1F5F9", color="#64748B"];
+i [label="调用 method_fn(...) → method_output\n有依赖时额外传入 sample_response", shape=box, fillcolor="#EDE9FE", color="#8B5CF6"];
+j [label="validate_fn(response, sample[answer])\n得到 validation", shape=box, fillcolor="#EDE9FE", color="#8B5CF6"];
+k [label="组装 result 字典\n方法输出 + 判分 + 参数 + 样本与编号", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+l [label="f.write(json.dumps(result) + 换行)\nf.flush() → 继续下一项\n输出文件：每行一个结果的 JSONL", shape=box, fillcolor="#DCFCE7", color="#16A34A"];
+m [label="基础依赖：step-by-step → step-by-step-forceans\n再分为 deer / codestop 两支；两者不是前后依赖\nflush 刷出 Python 缓冲，不等同于 fsync 持久化保证", shape=box, fillcolor="#F1F5F9", color="#64748B"];
+a -> b [label=""];
+b -> c [label=""];
+c -> d [label=""];
+d -> e [label="是"];
+d -> f [label="否"];
+f -> g [label="未处理项"];
+g -> h [label="是"];
+g -> i [label="否"];
+i -> j [label=""];
+j -> k [label=""];
+k -> l [label=""];
+l -> m [label=""];
+}
