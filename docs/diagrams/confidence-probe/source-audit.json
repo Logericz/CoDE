@@ -1,0 +1,10 @@
+{
+  "audited_on": "2026-10-07",
+  "scope": "source_reading_diagrams_not_model_experiment",
+  "upstream_base_commit": "b5081e7c2abe23bb1d19649421cc13522fee7c50",
+  "source_is_annotated_worktree": true,
+  "files": {
+    "upstream/CoDE-Stop/method_deer.py": "1d1905f09c105ac5c284c785336e02d60a4e782369489e0554cfaa35c1867b36",
+    "src/upstream_diagnostic.py": "ef4ff6465802eb808885c9d5720d189b8cfbec7d2dbba40905982a674e190005"
+  }
+}

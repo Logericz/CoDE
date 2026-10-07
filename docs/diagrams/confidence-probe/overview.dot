@@ -1,0 +1,32 @@
+digraph G {
+graph [rankdir=TB, bgcolor="#F8FAFC", pad=0.35, nodesep=0.32, ranksep=0.35, fontname="PingFang SC", fontsize=25, fontcolor="#0F172A", labelloc=t, label="calcu_max_probs_w_kv()\n一次检查点中的逐 token 试答"];
+node [shape=box, style="rounded,filled", fontname="PingFang SC", fontsize=17, fontcolor="#0F172A", penwidth=1.4, margin="0.18,0.12"];
+edge [color="#64748B", penwidth=1.4, arrowsize=0.7, fontname="PingFang SC", fontsize=14, fontcolor="#475569"];
+a [label="输入：pred_input_ids、kv_cache、tokenizer\nmethod、tot_step_cap、model", shape=box, fillcolor="#E0F2FE", color="#0284C7"];
+b [label="设置停止token ID列表\nmethod=0：编码 </think>\nmethod=1：还编码指定的换行/标点字符串", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+c [label="初始化：last_token=-1，n=0，累计值S=0\n两个空列表：pred_tokens、token_probs\n有输入KV则深拷贝并移到输入设备；否则为None", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+d [label="last_token 已在 stop_ids 中？", shape=diamond, fillcolor="#FEF3C7", color="#D97706"];
+e [label="选择本轮模型输入\n首次：pred_input_ids + 当前KV\n随后：上次生成的单个token + 当前KV", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+f [label="model(...) 前向计算，并更新本次试答的KV\n取最后位置 logits → softmax → torch.max\n选出 max_index 与 max_value（贪心选取）", shape=box, fillcolor="#EDE9FE", color="#8B5CF6"];
+g [label="先累计，再更新 last_token\n此前last_token=-1：S不变\n其他轮：method=0加log(p)，method=1加p", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+h [label="每一轮都保存 token ID 与概率\nlast_token = max_index\nn = n + 1", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+i [label="n > tot_step_cap？", shape=diamond, fillcolor="#FEF3C7", color="#D97706"];
+j [label="退出循环\nended_with_think = (last_token in stop_ids)\n按现有公式计算最终分数（见算例图）", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+k [label="把生成token列表decode成 predicted_answer\n释放本次试答的临时KV引用", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+l [label="返回字典：total_prob_max、predicted_answer\ntoken_ids、token_probs、ended_with_think", shape=box, fillcolor="#DCFCE7", color="#16A34A"];
+m [label="本函数不比较早停阈值，也不写实验文件\n调用者 method_deer() 使用分数作停止判断\ncap=20允许第21步；停止标记可能更早结束循环", shape=box, fillcolor="#F1F5F9", color="#64748B"];
+a -> b [label=""];
+b -> c [label=""];
+c -> d [label=""];
+d -> e [label="否"];
+e -> f [label=""];
+f -> g [label=""];
+g -> h [label=""];
+h -> i [label=""];
+i -> d [label="否，继续"];
+i -> j [label="是"];
+d -> j [label="是"];
+j -> k [label=""];
+k -> l [label=""];
+l -> m [label=""];
+}
