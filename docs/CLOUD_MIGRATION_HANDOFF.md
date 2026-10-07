@@ -59,7 +59,7 @@ ValueError: Upstream source differs from pinned version: models.py
 - 论文：<https://arxiv.org/html/2604.04930v2>
 - 作者仓库：<https://github.com/sudoparsa/CoDE-Stop>
 - 固定上游提交：`b5081e7c2abe23bb1d19649421cc13522fee7c50`
-- 用户项目仓库：<https://github.com/Ericzhy0716/CoDE>
+- 用户项目仓库：<https://github.com/Logericz/CoDE>。本次同步时 GitHub 提示原地址 `Ericzhy0716/CoDE` 已迁移到此处；旧文档仍可能保留原地址。
 - 主模型：`Qwen/Qwen3-4B`
 - 模型与 tokenizer revision：`1cfa9a7208912126459214e8b04321603b3df60c`
 
