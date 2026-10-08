@@ -1,0 +1,687 @@
+diff --git a/inference.py b/inference.py
+index 6e81b55b4c3921a7c856aa656e1d0d372091f87e..9a1c237138de99bd543d19e686310dfaffcb95bf 100644
+--- a/inference.py
++++ b/inference.py
+@@ -82,74 +82,88 @@ def validate_answer_math_verify(response: str, ground_truth: str) -> dict[str, A
+     }
+ 
+ 
+-
++    # 通用强制回答函数：在运行名称带-forceans的方法时调用，处理前置方法已经生成的回答；如果它快用完 token 预算，就截短末尾推理，并引导模型补出最终答案
+ def generic_forceans(model, tokenizer, sample: dict[str, Any], B: int, sample_response: dict[str, Any]) -> dict[str, Any]:
+-    sample_response_ids = tokenizer.encode(sample_response['method_output']['response'])
++    sample_response_ids = tokenizer.encode(sample_response['method_output']['response'])    # 取出整条实验记录中方法输出字典中的回答文本（两层字典），并转换成tokenID，后面好计算长度
+     
+     # We leave more room for code generation compared to single-number math answers
+-    min_tokens_left = 300 if sample.get("is_lcb") else 50
+-    if len(sample_response_ids) < B - min_tokens_left:
++    min_tokens_left = 300 if sample.get("is_lcb") else 50   # is_lcb 是不是 live code bench 数据集的标志位；如果是，就留出更多的 token 空间给代码生成；否则只留 50 个 token 空间给单数字数学答案
++    if len(sample_response_ids) < B - min_tokens_left:  # min_tokens_left 是最小剩余 token 数量，是为最终答案预留的token空间
+         # print(f"unchanging response tokens: {sample_response['method_output']['response_tokens']=} -> {len(tokenizer.encode(sample_response['method_output']['response']))}")
+         return {
+-            "response": sample_response['method_output']['response'],
+-            "response_tokens": len(sample_response_ids),
+-            "work": len(sample_response_ids),
+-            "remainder": '',
+-            "remainder_tokens": 0,
+-            "final_part": '',
+-            'forced': False
++            "response": sample_response['method_output']['response'],   # 取出整条实验记录中方法输出字典中的回答文本（两层字典）
++            "response_tokens": len(sample_response_ids),                # 回答文本的 token 数量
++            "work": len(sample_response_ids),                           # 工作量（目前没有中间试探答案，所以等于回答文本的 token 数量）
++            "remainder": '',                                            # 剩余的文本（目前没有中间试探答案，所以为空字符串）
++            "remainder_tokens": 0,                                      # 剩余文本的 token 数量（目前没有中间试探答案，所以为 0）
++            "final_part": '',                                           # 最终生成的文本（目前没有中间试探答案，所以为空字符串）
++            'forced': False                                             # 是否强制补答（目前没有中间试探答案，所以为 False）
+         }
+ 
+-    sentences = nltk.sent_tokenize(sample_response['method_output']['response'])
++    sentences = nltk.sent_tokenize(sample_response['method_output']['response'])    # nltk.sent_tokenize 是 NLTK 库中的一个函数，用于将文本分割成句子列表；这里是把回答文本分割成句子列表，方便后续按句子删减，直到剩下足够空间给最终答案
+     if len(sentences) == 1:
+-        sentences = sample_response['method_output']['response'].split('\n\n')
+-    while sentences:
+-        remainder = ' '.join(sentences)
+-        remainder_tokens = tokenizer.encode(remainder)
+-        tokens_left = B - len(remainder_tokens)
+-        if tokens_left >= min_tokens_left:
++        sentences = sample_response['method_output']['response'].split('\n\n')      # 如果只有一句话，就按两个换行符分割成段落列表
++    while sentences:    # 不断删掉末尾句子，直到剩下足够空间
++        remainder = ' '.join(sentences)                 # 用空格连接剩下的句子，得到删减后的文本
++        remainder_tokens = tokenizer.encode(remainder)  # 将拼接后的字符串转换成 token ID 列表
++        tokens_left = B - len(remainder_tokens)         # 计算剩余的 token 空间，B 是总的 token 预算，len(remainder_tokens) 是当前回答文本的 token 数量
++        if tokens_left >= min_tokens_left:              
+             break
+-        sentences = sentences[:-1]
++        sentences = sentences[:-1]                      # 保留从开头到倒数第二个元素，删除最后一句，继续循环，直到剩下足够空间给最终答案
+     
+-    stop_think_token_id = tokenizer.encode("</think>", add_special_tokens=False)[0]
+-    if stop_think_token_id not in remainder_tokens:
+-        remainder += "\n</think>"
++    stop_think_token_id = tokenizer.encode("</think>", add_special_tokens=False)[0] # 获取 "</think>" 的 token ID，用于判断剩余文本是否以 "</think>" 结尾，
++    if stop_think_token_id not in remainder_tokens: # 如果剩余文本的 token ID 列表中没有 "</think>"，就说明剩余文本没有完整的思考块，需要在末尾补上 "</think>"，以便模型知道思考已经结束
++        remainder += "\n</think>"   # remainder 是剩余文本，补上 "</think>"，告诉模型思考已经结束
+         
+-    if sample.get('is_lcb'):
++    if sample.get('is_lcb'):    # 如果是 live code bench 数据集（代码题），就在末尾补上代码块的提示语，告诉模型接下来需要生成代码
+         remainder += "\n\n**Final Answer**\nThe final code is:\n```python\n"
+     else:
+-        remainder += "\n\n**Final Answer**\nThe final answer is: \\boxed{"
++        remainder += "\n\n**Final Answer**\nThe final answer is: \\boxed{"  # 否则就补上数学题的提示语，告诉模型接下来需要生成最终答案,不加上 "}"，是想让模型来写
+         
+-    messages = sample_response['method_output']['messages']
+-    question_prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+-    prompt = question_prompt + remainder
++    messages = sample_response['method_output']['messages'] # 取出前置方法保存的原始聊天信息，其中包含用户的提问和模型的回答，作为上下文传给模型，让模型知道之前的对话内容
++    question_prompt = tokenizer.apply_chat_template(    # apply_chat_template 是 tokenizer 的一个方法，用于将消息列表转换为模型可以理解的输入格式
++        messages, 
++        tokenize=False,             # 不转换成 token ID，直接返回字符串
++        add_generation_prompt=True  # 添加生成提示，告诉模型接下来需要生成文本
++    )
++    prompt = question_prompt + remainder    # 原始题目、提示词和助手回答开头+remainder（删减后保留的原回答+思考结束标记和最终答案前缀）
+     
++    """
++    输出类似如下：
++    用户：请解决这道题……
++    助手：已经进行的推理……
++    </think>
++
++    **Final Answer**
++    The final answer is: \boxed{
++    """
++
+     device = next(model.parameters()).device
+     inputs = tokenizer(prompt, return_tensors="pt", padding=True)
+-    inputs = {k: v.to(device) for k, v in inputs.items()}
++    inputs = {k: v.to(device) for k, v in inputs.items()}   # 把张量移动到对应的设备
+     
+-    gen_kwargs = {
+-        "max_new_tokens": tokens_left,
++    gen_kwargs = {   # 构建参数字典，传递给模型的生成函数
++        "max_new_tokens": tokens_left,  # 最多生成 tokens_left 个新 token，tokens_left 是剩余的 token 空间
+         "pad_token_id": tokenizer.pad_token_id,
+         "eos_token_id": tokenizer.eos_token_id,
+         "do_sample": True,
+     }
+     with torch.no_grad():
+-        outputs = model.generate(**inputs, **gen_kwargs)
+-    final_part = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
++        outputs = model.generate(**inputs, **gen_kwargs)    # 调用模型的 generate 方法生成文本，把 input（输入）和 gen_kwargs（生成设置）两个字典展开，传入里面多个参数，返回生成的输出张量 outputs，其中包含输入提示的 token + 新生成的 token（的 ID）
++    final_part = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)  # 本次新生成的文本；inputs["input_ids"].shape[1]: 获取输入的 token 长度，outputs[0][inputs["input_ids"].shape[1]:] 取出新生成的 token 部分，skip_special_tokens=True 跳过特殊 token（如 <pad>、<eos> 等），只返回可读文本
+     
+     # Combine remainder with the generated final part
+-    full_response = remainder + final_part
+-    response_tokens = len(remainder_tokens) + len(tokenizer.encode(final_part))
++    full_response = remainder + final_part  # 把删减后的回答文本和新生成的最终答案拼接起来，得到完整的回答文本
++    response_tokens = len(remainder_tokens) + len(tokenizer.encode(final_part)) # 计算完整回答文本的 token 数量，包括删减后的回答文本和新生成的最终答案的 token 数量
+     
+     return {
+-        "response": full_response,
+-        "response_tokens": response_tokens,
++        "response": full_response,  # 保留内容、答案前缀与新生成内容拼成的回答
++        "response_tokens": response_tokens, # 完整回答文本的 token 数量
+         "work": response_tokens,
+-        "remainder": remainder,
+-        "remainder_tokens": len(remainder_tokens),
+-        "final_part": final_part,
+-        'forced': True
++        "remainder": remainder,     # 删减后的回答文本（保留内容+思考结束标记+最终答案前缀）
++        "remainder_tokens": len(remainder_tokens),  # 删减后的回答文本的 token 数量
++        "final_part": final_part,   # 新生成的最终答案文本
++        'forced': True              # 是否强制补答，True 表示进行了强制补答
+     }
+ 
+ 
+@@ -220,8 +234,10 @@ STOP_WORDS_REGISTRY: dict[str, str] = {
+     "newline": "\n\n",
+ }
+ 
+-# Registry of inference methods
+-METHOD_REGISTRY: dict[str, Callable] = {
++# 方法注册表
++# 键是命令行使用的方法名称，值是对应的函数对象
++# 此处只保存函数，不执行；主流程根据 args.method 查表后再调用
++METHOD_REGISTRY: dict[str, Callable] = {    
+     "step-by-step": method_step_by_step,
+     "step-by-step-forceans": generic_forceans,
+     "budget-prompt": method_budget_prompt,
+@@ -328,6 +344,7 @@ METHOD_HYPERPARAMS: dict[str, dict[str, tuple[type, str]]] = {
+ # Registry mapping dataset name to the appropriate answer validation function.
+ # aime uses symbolic math_verify; math500 and gsm1k use LLM-as-judge evaluation.
+ # gpqad uses letter extraction for multiple-choice answer comparison.
++# # 根据数据集名称，选择评分函数
+ VALIDATION_REGISTRY: dict[str, Callable] = {
+     "aime": validate_answer_math_verify,
+     "math500": validate_answer_llm,
+@@ -338,6 +355,7 @@ VALIDATION_REGISTRY: dict[str, Callable] = {
+ 
+ # Registry of methods that require a sample response from another method's cache
+ # Maps method name to the method it depends on
++# 方法依赖注册表，记录了哪些方法需要依赖其他方法的缓存结果
+ METHOD_DEPENDENCIES: dict[str, str] = {
+     "deer": "step-by-step-forceans",
+     "eat": "step-by-step-forceans",
+@@ -521,11 +539,11 @@ def main():
+         if args.eval_system_prompt_file:
+             with open(args.eval_system_prompt_file) as sp_f:
+                 eval_system_prompt = sp_f.read().strip()
+-        validate_fn = functools.partial(
+-            validate_answer_llm,
+-            client=llm_client,
+-            model=args.eval_model,
+-            template=eval_system_prompt,
++        validate_fn = functools.partial(    # functools.partial() 函数用于创建一个新的函数，该函数是原始函数的一个“部分应用”，即预先填充了一些参数。这里的作用是将 validate_answer_llm 函数的一些参数（client、model、template）固定下来，返回一个新的函数 validate_fn，这样在后续调用 validate_fn 时，只需要传入剩余的参数（response 和 ground_truth）。
++            validate_answer_llm,    # 要调用的原始函数
++            client=llm_client,      # 提前配置的客户端
++            model=args.eval_model,  # 提前配置的评估模型
++            template=eval_system_prompt,    # 提前配置的系统提示词
+         )
+         print(f"Using LLM evaluation with model: {args.eval_model}")
+     else:
+@@ -535,7 +553,7 @@ def main():
+     chunk_idx = args.chunk_idx
+     B = args.max_new_tokens
+     N = args.num_rollouts
+-    method_fn = METHOD_REGISTRY[args.method]
++    method_fn = METHOD_REGISTRY[args.method]    # args是命令行参数，args.method读取args对象中名为method的属性值，METHOD_REGISTRY是一个字典，键是方法名称，值是对应的函数对象。通过args.method作为键从METHOD_REGISTRY中获取对应的函数对象，并赋值给method_fn变量。
+     if chunk_idx < 0 or chunk_idx >= num_chunks:
+         raise ValueError(f"Chunk index {chunk_idx} must be in range [0, {num_chunks - 1}]")
+ 
+@@ -571,16 +589,22 @@ def main():
+     processed_keys = collect_processed_keys(output_dir, args.model, args.dataset, args.method, B, hyperparams_suffix)
+     print(f"Found {len(processed_keys)} already processed (sample, rollout) pairs across all chunks")
+ 
+-    # Load dependency method cache if this method requires sample responses from another method
+-    dependency_cache = {}
++    # 检查当前方法是否依赖前置结果；如果依赖，就读取这些结果。读不到时，停止运行并提示先执行前置方法
++    dependency_cache = {}   # 初始化一个空字典，用来保存读到的前置方法实验结果
+     dependency_method = METHOD_DEPENDENCIES.get(args.method)
+     if dependency_method:
+-        # For now, we assume the dependency method has no hyperparams suffix
+-        # This can be extended later to support dependencies with hyperparams
+-        dependency_cache = load_method_cache(output_dir, args.model, args.dataset, dependency_method, B)
++        # For now, we assume the dependency method has no hyperparams suffix（后缀）
++        # This can be extended later to support dependencies with hyperparams 这段调用没有进一步指定前置方法的超参数组合
++        dependency_cache = load_method_cache(   # 调用load_method_cache函数，读取前置方法的实验结果缓存
++            output_dir,     # 去哪个目录寻找结果
++            args.model,     # 寻找哪个模型的结果
++            args.dataset,   # 寻找哪个数据集的结果
++            dependency_method, # 寻找哪个前置方法的结果
++            B                  # 寻找哪个生成预算下的结果
++        )
+         print(f"Loaded {len(dependency_cache)} {dependency_method} responses from cache")
+         if not dependency_cache:
+-            raise RuntimeError(
++            raise RuntimeError( # 如果没有读到前置方法的结果，就报错并提示用户先执行前置方法
+                 f"Method '{args.method}' requires '{dependency_method}' cache but no cache found. "
+                 f"Run {dependency_method} method first for model={args.model}, dataset={args.dataset}, B={B}"
+             )
+@@ -613,25 +637,28 @@ def main():
+                         print(f"Warning: No {dependency_method} cache for sample_idx={sample_idx}, rollout_idx={rollout_idx}, skipping")
+                         continue
+                     sample_response = dependency_cache[cache_key]
+-                    method_output = method_fn(model, tokenizer, sample, B, sample_response=sample_response, **method_hyperparams)
++                    method_output = method_fn(model, tokenizer, sample, B, sample_response=sample_response, **method_hyperparams)   # 调用方法，拿到带有模型回答的字典
+                 else:
+                     method_output = method_fn(model, tokenizer, sample, B, **method_hyperparams)
+                 
+-                validation = validate_fn(method_output["response"], sample["answer"])
+-                result = {
+-                    "sample_idx": sample_idx,
+-                    "rollout_idx": rollout_idx,
+-                    "method": args.method,
+-                    "model": args.model,
+-                    "dataset": args.dataset,
+-                    "B": B,
+-                    "hyperparams": {k: v for k, v in hyperparams.items() if v is not None},
+-                    "method_output": method_output,
+-                    "validation": validation,
+-                    "sample": sample
++                validation = validate_fn(   # 调用验证函数，返回一个字典，包含验证结果和相关信息
++                    method_output["response"],  # 模型的回答
++                    sample["answer"]    # 数据集提供的参考答案
++                )
++                result = {  # 把实验的所有信息都放到一个字典里，方便后续分析
++                    "sample_idx": sample_idx,   # 题目在数据集中的下标（确认是哪道题）
++                    "rollout_idx": rollout_idx, # 这道题第几次生成的下标（确认是哪一次生成）
++                    "method": args.method,      # 使用的方法名称
++                    "model": args.model,        # 使用的模型名称
++                    "dataset": args.dataset,    # 使用的数据集名称
++                    "B": B,                     # 最大生成的token数
++                    "hyperparams": {k: v for k, v in hyperparams.items() if v is not None}, # 保留非空的超参数
++                    "method_output": method_output, # 模型生成的回答和相关信息
++                    "validation": validation,   # 验证结果,用于统计准确率
++                    "sample": sample            # 原始数据集中的题目和答案
+                 }
+-                f.write(json.dumps(result) + '\n')
+-                f.flush()
++                f.write(json.dumps(result) + '\n')      # 把python字典转换成json字符串后写入文件，每行一个json对象
++                f.flush()                               # 确保数据立即写入磁盘，避免数据丢失
+             
+             # Progress logging
+             samples_done = sample_idx - start_idx + 1
+diff --git a/method_deer.py b/method_deer.py
+index 15c7945f7aada5600ccbb957b0c8f8dad966e070..d74b562a0ac72c1b7394d34c76e4f5f511e7d8ab 100644
+--- a/method_deer.py
++++ b/method_deer.py
+@@ -8,80 +8,100 @@ import torch
+ from copy import deepcopy
+ from cache_utils import cache_to_device
+ 
+-
+-def calcu_max_probs_w_kv(model, pred_input_ids, kv_cache, tokenizer, method=0, tot_step_cap=20):
++# 试探答案的置信度计算函数，使用 KV cache 来加速推理
++def calcu_max_probs_w_kv(model,             # 负责预测下一个token的模型
++                         pred_input_ids,    # 预测答案的前缀 token ID 张量，形状为 (1, L)，其中 L 是前缀长度
++                         kv_cache,          # 预测前缀的KV cache
++                         tokenizer,          
++                         method=0,          # 用于区分采用不同的模型
++                         tot_step_cap=20    # 限制生成的最大 token 数量，防止无限循环
++    ): 
+     # method==0 is Qwen3, method==1 is everything else
+     if method == 0:
+-        stop_words = ['</think>']
++        stop_words = ['</think>']                                               # 只允许以 </think> 作为 token 结束试探
+     else: # method == 1
+-        stop_words = ['</think>', '\n', '}\n', '\n\n', '}.', '.\n', '.\n\n']
++        stop_words = ['</think>', '\n', '}\n', '\n\n', '}.', '.\n', '.\n\n']    # 还允许部分换行、标点对应的 token 结束试探
++    
++    # 把 stop_words 编码为 token ID 列表，方便后续判断生成的 token 是否属于停止条件
+     stop_ids = []
+     for word in stop_words:
+         stop_ids.extend(tokenizer(word, add_special_tokens=False)['input_ids'])
+     
+-    total_steps = 0
+-    total_prob_max = 0.0
++    total_steps = 0         # 记录生成的 token 数量，防止超过 tot_step_cap
++    total_prob_max = 0.0    # 记录试探答案的总置信度，method==0 时是 log 概率和，method==1 时是概率和
+ 
+-    pred_tokens, token_probs = [], []
+-    last_token = -1
++    pred_tokens, token_probs = [], []   # 用于保存生成的 token ID 列表和对应的概率列表
++    last_token = -1                     # 用于记录上一个生成的 token ID，初始为 -1，表示还没有生成任何 token
+    
+     # Move cache to GPU for computation (deepcopy to preserve original)
++    # 如果 kv_cache 不为空，则将其深拷贝后移动到模型所在的设备上，作为当前的 KV cache；否则 curr_kv_cache 置为 None.本次试探只更新这个副本curr_kv_cache，不会修改原来的 kv_cache,这样临时答案产生的计算状态并不会混入原来的的推理缓存。
+     if kv_cache is not None:
+         curr_kv_cache = cache_to_device(deepcopy(kv_cache), pred_input_ids.device)
+     else:
+         curr_kv_cache = None
+-    torch.cuda.empty_cache()
++    torch.cuda.empty_cache()    # torch.cuda.empty_cache() 清的是 PyTorch 没在用的 CUDA 显存缓存，不是模型的 KV cache，也不会删除仍然活着的 Tensor
+    
+     with torch.no_grad():
++        # 先计算前缀的输出，更新 curr_kv_cache
+         while last_token not in stop_ids:
+-            if last_token == -1:
+-                output_dicts = model(input_ids=pred_input_ids, past_key_values=curr_kv_cache)
+-            else:
++            if last_token == -1:    # 第一次循环还没有生成任何新的token，所以直接输入整个前缀 pred_input_ids 进行前向计算，更新 curr_kv_cache
++                output_dicts = model(input_ids=pred_input_ids, past_key_values=curr_kv_cache) 
++            else:                   # 在后续循环中，前面的内容已经保存在 curr_kv_cache 中，所以只需要输入上一个生成的 token last_token 进行前向计算，更新 curr_kv_cache
+                 output_dicts = model(
+                     input_ids=torch.tensor([last_token]).unsqueeze(0).to(pred_input_ids.device),
+                     past_key_values=curr_kv_cache
+                 )
++            # 取batch中第一条样本，序列最后一个token的logits
+             logits = output_dicts['logits'][0][-1]
++            # 取出更新后的 KV cache，继续用于下一步的生成
+             curr_kv_cache = output_dicts['past_key_values']
++            # 把logits转换成当前token的概率分布（打分->概率）；dim=-1表示在最后一个维度上做softmax，也就是对每个token的logits进行归一化，得到概率分布
+             probs = F.softmax(logits, dim=-1)
++            # 取出概率最大的 token 的值和索引；dim=0表示在第一个维度上取最大值，这里是对所有token的概率分布取最大值，返回最大概率值和对应的token索引
++            # 因为logits已经是一维[vocab_size]，所以softmax的dim=-1和torch.max的dim=0都是在同一个维度上操作，得到最大概率和对应的token id
+             max_value, max_index = torch.max(probs, dim=0)
+-
++            
++            # 累积置信度
+             if last_token == -1:
+-                total_prob_max = total_prob_max
++                total_prob_max = total_prob_max # 第一次forward暂时不加入累积分数
+             else:
+-                if method == 0:
++                if method == 0:                 # method==0时，累积的是log概率和，所以这里用torch.log(max_value)累加；method==1时，累积的是概率和，所以直接累加max_value
+                     total_prob_max += torch.log(max_value)
+                 else:
+                     total_prob_max += max_value
+             
+-            pred_tokens.append(max_index)
+-            token_probs.append(max_value.item())
+-            last_token = max_index
++            # 保存当前预测token
++            pred_tokens.append(max_index)           # 保存这一步选出来的token id
++            token_probs.append(max_value.item())    # 保存这一步token的最大概率；.item()把Tensor转换为Python float类型，方便后续处理
++            last_token = max_index                  # 更新 last_token 为当前生成的 token id，供下一轮循环使用   
+ 
+-            total_steps += 1
++            total_steps += 1                        # 累计生成的 token 数量，防止超过 tot_step_cap
+             if total_steps > tot_step_cap:
+                 break
+     
+-    # Check if generation ended with </think>
++    # 判断这次试探生成是不是遇到了 stop token，ended_with_think 为 True 表示生成的试探答案以 </think> 结束，False 表示没有遇到 stop token 就超过了 tot_step_cap 或者其他原因结束
+     ended_with_think = (last_token in stop_ids)
+ 
+-    if method == 0:
++    # 根据 method 的不同，对 total_prob_max 做归一化处理，得到平均置信度
++    if method == 0:         # method==0时，total_prob_max是log概率和，所以先减去log(max_value)（去掉最后stop token对置信度的影响）再除以(total_steps-1)（第一次生成的token概率没有被加入total_prob_max,这里的total_steps也就是生成的token数量），然后再取指数，得到平均概率 
+         total_prob_max = torch.exp((total_prob_max - torch.log(max_value)) / (total_steps - 1))
+-    else:
++    else:                   # method==1时，total_prob_max是概率和，所以先减去max_value再除以(total_steps-1)，得到平均概率
+         total_prob_max = (total_prob_max - max_value) / (total_steps - 1)
+ 
+-    # Decode the predicted answer
++    # 把生成的 token ID 列表转换为 Python 列表，并解码为可读文本
+     pred_token_ids = [t.item() for t in pred_tokens]
+     predicted_answer = tokenizer.decode(pred_token_ids, skip_special_tokens=True)
+     
+-    # Decode the prompt that was used
++    # 把 这次用于预测的输入prompt（pred_input_ids[0]）解码为可读文本，方便调试和分析
+     prompt_text = tokenizer.decode(pred_input_ids[0], skip_special_tokens=True)
+ 
++    # 删除这次试探生成使用的临时 KV cache
+     del curr_kv_cache
+-    if 'output_dicts' in locals():
++    if 'output_dicts' in locals():      # 检查 output_dicts 是否存在，如果存在则删除它，释放内存;其中locals():返回当前函数中局部变量
+         del output_dicts
+     torch.cuda.empty_cache() 
+     
++    # 返回一个字典，包含试探答案的总置信度、预测的答案、生成的 token ID 列表、每个 token 的概率列表，以及是否以 </think> 结束
+     return {
+         'total_prob_max': total_prob_max.item(),
+         'predicted_answer': predicted_answer,
+@@ -90,87 +110,131 @@ def calcu_max_probs_w_kv(model, pred_input_ids, kv_cache, tokenizer, method=0, t
+         'ended_with_think': ended_with_think,
+     }
+ 
+-
+-def method_deer(model, tokenizer, sample: dict[str, Any], B: int, sample_response: dict[str, Any], threshold: float, stop_word: str = "Wait", ewt: bool = True, cp_cache: bool = True) -> dict[str, Any]:
++# 负责执行 DEER 提前停止策略的函数,判断：根据模型已经写出的这部分推理，现在是否可以结束思考、生成最终回答
++def method_deer(
++    model, 
++    tokenizer, 
++    sample: dict[str, Any], # 
++    B: int, 
++    sample_response: dict[str, Any],    # 前置方法的使用记录，其中包含已有回答
++    threshold: float,           # 用于判断答案的置信度超过多少，才考虑提前停止推理并生成最终答案
++    stop_word: str = "Wait",    # 用于定位置信度检查点；匹配到后还需检查分数
++    ewt: bool = True,           # 控制试探答案的停止与评分方式；为True时，还要求试探生成到结束标记才触发提前停止
++    cp_cache: bool = True       # 是否复用推理前缀的KV cache
++) -> dict[str, Any]:
+     content = sample['question'] + "\n\nPlease reason step by step, and put your final answer within \\boxed{}."
+     messages = [{'role': 'user', 'content': content}]
+     if 'nemotron' in model.name_or_path.lower():
+-        messages = [{"role": "system", "content": f"detailed thinking on"}] + messages
+-    prompt_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True)
+-    if transformers.__version__.split('.')[0] == '5' and hasattr(prompt_ids, 'input_ids'): prompt_ids = prompt_ids['input_ids'] # change in apply_chat_template for transformersv5
+-    stop_tokens = tokenizer(stop_word, add_special_tokens=False)["input_ids"] + [tokenizer.eos_token_id]
+-    sample_response_ids = tokenizer(sample_response['method_output']['response'])["input_ids"]
+-    stop_token_idxs = list(i for i, tok in enumerate(sample_response_ids) if tok in stop_tokens)
++        messages = [{"role": "system", "content": f"detailed thinking on"}] + messages  # 对于nemotron模型，添加系统消息，告诉模型需要进行详细的思考
++    prompt_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True)    # apply_chat_template() 没有指定 tokenize=false，默认会进行编码，返回 token ID
++    if transformers.__version__.split('.')[0] == '5'and hasattr(prompt_ids, 'input_ids'): prompt_ids = prompt_ids['input_ids'] # 先检查transformers版本是否为5，如果是，则检查prompt_ids是否有input_ids属性，如果有，则将prompt_ids更新为其input_ids属性的值，
++    # （存疑）这一行是在处理一种可能的返回格式差异：如果 apply_chat_template() 返回的是一个包含 input_ids 的对象，就从对象里取出真正的 ID 列表。
+     
++    # 假设 Wait 的 ID 是 42，EOS 的 ID 是 2。stop_tokens = [42, 2]
++    stop_tokens = tokenizer(stop_word, add_special_tokens=False)["input_ids"] + [tokenizer.eos_token_id] # 把stop_word编码为要寻找的id，会返回一个token id列表，其中包含stop_word的id和“回答结束（eos）”的id；
++    # tokenizer返回一个字典，[“input_ids”]是键，再取出对应键的值，也就是 "Wait" 编码后的 ID 列表。
++    sample_response_ids = tokenizer(sample_response['method_output']['response'])["input_ids"]  # 取出前置方法保存的回答文字。然后 tokenizer(...) 把它编码成 token ID 列表；
++    stop_token_idxs = list(i 
++                           for i, 
++                           tok in enumerate(sample_response_ids) 
++                           if tok in stop_tokens)    # 找出回答里的检查位置。enumerate函数会返回（下标i，该位置的元素tok），只保留i
++    
++    # 准备试探答案前缀与正式答案前缀
+     if sample.get('is_lcb'):
+-        trial_answer_ids = torch.tensor(
++        trial_answer_ids = torch.tensor(    # 用于试探答案
+             tokenizer("\n**Final Answer**\nThe final code is:\n```python\n", add_special_tokens=False)["input_ids"]
+-        ).unsqueeze(0).to(model.device)
+-        final_answer_ids = tokenizer("</think>\n**Final Answer**\nThe final code is:\n```python\n", add_special_tokens=False)["input_ids"]
++        ).unsqueeze(0).to(model.device)     # 文字前缀+编码为token id列表，再通过torch.tensor转换为一维张量;.unsqueeze(0)在最前增加一个维度，得到（1，L）的二维张量；最后把张量移到模型使用的设备上
++        
++        # final_answer_id：一段固定的最终答案提示文本
++        # 此处保存为 ID 列表，方便后面与其他 ID 列表拼接。
++        final_answer_ids = tokenizer("</think>\n**Final Answer**\nThe final code is:\n```python\n", add_special_tokens=False)["input_ids"]  
+         max_new_tokens = 300
+     else:
+         trial_answer_ids = torch.tensor(
+             tokenizer("\n**Final Answer**\n\nThe final answer is \\boxed", add_special_tokens=False)["input_ids"]
+-        ).unsqueeze(0).to(model.device)
++        ).unsqueeze(0).to(model.device) # 
+         final_answer_ids = tokenizer("</think>\n**Final Answer**\n\nThe final answer is \\boxed", add_special_tokens=False)["input_ids"]
+         max_new_tokens = 30
+     
+-    past_key_values = DynamicCache() if cp_cache else None
+-    prob_checks = []
++    past_key_values = DynamicCache() if cp_cache else None  # 需要复用 KV cache 时，先创建空缓存；否则使用 None。KV cache 是 Transformer 模型在生成时保存的中间状态，用于加速后续的推理。
++    prob_checks = []                                        # 创建一个列表，用来保存每次检查的试探答案、分数和结束情况。
+ 
+-    prev_stop_token_idx = 0
++    prev_stop_token_idx = 0                                 # 上一个检查点下标，用来确定本轮新增了哪段推理
++    
++    # 遍历所有检查点，逐个计算试探答案的置信度
+     for i, stop_token_idx in enumerate(stop_token_idxs):
+-        if cp_cache:
+-            # fill in KV cache up to this point
+-            if prev_stop_token_idx == 0:
+-                input_ids = torch.tensor(prompt_ids+sample_response_ids[:stop_token_idx]).unsqueeze(0).to(model.device)
+-            else:
++        if cp_cache: 
++            # 如果需要复用 KV cache，则只对新增的推理部分进行前向计算，更新缓存；否则每次都从头计算整个输入。
++            if prev_stop_token_idx == 0:    # 如果是第一个检查点（之前的缓存为空），则输入题目 + 第一处检查点之前的推理
++                input_ids = torch.tensor(prompt_ids+sample_response_ids[:stop_token_idx]).unsqueeze(0).to(model.device) 
++            else:                           # 如果不是第一个检查点，则只输入新增的推理部分（上一个检查点到当前检查点之间的内容）
+                 input_ids = torch.tensor(sample_response_ids[prev_stop_token_idx:stop_token_idx]).unsqueeze(0).to(model.device)
+-            prev_stop_token_idx = stop_token_idx
++            prev_stop_token_idx = stop_token_idx    # 更新上一个检查点下标为当前检查点下标
+             with torch.no_grad():
+-                # Move cache to GPU for forward pass
++                # 把前文缓存移到模型所在设备
+                 gpu_cache = cache_to_device(past_key_values, model.device)
++                # 一次模型前向计算，主要用于处理本轮输入并更新缓存。它还不是后面的正式答案生成
+                 outputs = model(input_ids=input_ids, past_key_values=gpu_cache)
+-                # Move updated cache back to CPU to save GPU memory
++                # 从模型输出中取出更新后的缓存，移到 CPU 保存，减少长期保留缓存时的 GPU 显存占用
+                 past_key_values = cache_to_device(outputs['past_key_values'], 'cpu')
+-            del outputs, gpu_cache
++            # 删除两个变量的引用，并释放 PyTorch 当前闲置的 CUDA 缓存显存。
++            del outputs, gpu_cache  
+             torch.cuda.empty_cache()
+ 
+-            # check answer confidence at this point
++            # 计算试探答案的置信度
++            # 这里的 trial_answer_ids 是试探答案的前缀，后续会生成试探答案的内容。calcu_max_probs_w_kv() 会返回一个字典，包含试探答案的最大概率、预测的答案、token id 列表、token 概率列表，以及是否以 </think> 结束。
+             prob_result = calcu_max_probs_w_kv(model, trial_answer_ids, past_key_values, tokenizer, method=(0 if ewt else 1), tot_step_cap=(300 if sample.get('is_lcb') else 20))
++        
++        # 如果没有可复用的前文缓存，所以每轮都把题目+前面所有的推理+试探答案前缀都输入模型，重新计算整个序列的输出
+         else:
++            # trial_answer_ids[0].tolist()  转成 Python 列表，以便用 + 拼接
+             full_pred_input_ids = torch.tensor(prompt_ids + sample_response_ids[:stop_token_idx] + trial_answer_ids[0].tolist()).unsqueeze(0).to(model.device)
++            # 计算试探答案的置信度
+             prob_result = calcu_max_probs_w_kv(model, full_pred_input_ids, None, tokenizer, method=(0 if ewt else 1), tot_step_cap=(300 if sample.get('is_lcb') else 20))
+-
++        # 把当前检查结果加到列表末尾
+         prob_checks.append(prob_result)
+ 
+         # If exceeding threshold, stop early and generate final answer
+-        if (not ewt or prob_result['ended_with_think']) and prob_result['total_prob_max'] > threshold:
+-            input_ids = torch.tensor(prompt_ids + sample_response_ids[:stop_token_idx] + final_answer_ids).unsqueeze(0).to(model.device)
++        # 判断是否允许提前停止
++        if (
++            (not ewt or prob_result["ended_with_think"])    # 要么 EWT 没开，要么 trial answer 必须正常结束
++            and prob_result["total_prob_max"] > threshold   #试探分数严格超过门槛
++        ): 
++
++            # 通过检查后，提前停止推理，生成最终答案
++            # 这里的 input_ids 是题目 + 当前检查点之前的推理 + 正式答案前缀，作为模型生成最终答案的输入
++            input_ids = torch.tensor(prompt_ids + sample_response_ids[:stop_token_idx] + final_answer_ids).unsqueeze(0).to(model.device)     
+             with torch.no_grad():
+                 outputs = model.generate(
+                     input_ids,
+-                    attention_mask=torch.ones_like(input_ids),
+-                    pad_token_id=tokenizer.eos_token_id,
++                    attention_mask=torch.ones_like(input_ids),  # 创建和input_ids同形状、全为 1 的掩码，表示这里所有输入位置都有效
++                    pad_token_id=tokenizer.eos_token_id,    # 填充 token ID 设置为 EOS token ID，确保生成时不会因为填充而影响结果
+                     max_new_tokens=max_new_tokens,
+                     do_sample=True,
+-                    return_dict_in_generate=True, 
+-                    past_key_values=cache_to_device(past_key_values, 'cuda') if cp_cache else None,
++                    return_dict_in_generate=True,           # 生成结果以字典形式返回，包含生成的序列、分数等信息
++                    past_key_values=cache_to_device(past_key_values, 'cuda') if cp_cache else None,                     # 如果复用缓存，则把缓存从cpu移回到 GPU 供生成使用；否则不传递缓存
+                 )
++            # 计算生成的最终答案的 token 数量，减去 prompt_ids 的长度，得到新生成的 token 数量
++            # outputs.sequences[0] 保存第一条完整序列，包含题目输入 + 保留的推理 + 正式答案前缀 + 新生成的答案
+             response_tokens = len(outputs.sequences[0]) - len(prompt_ids)
++            # 计算总工作量：新生成的 token 数量 + 所有检查点的 token 数量之和
+             work = response_tokens + sum(len(prob_check['token_ids']) for prob_check in prob_checks)
+             return {
+-                'response': tokenizer.decode(outputs.sequences[0][len(prompt_ids):], skip_special_tokens=True),
+-                'prob_checks': prob_checks,
+-                'threshold': threshold,
+-                'stopped_early': True,
+-                'response_tokens': response_tokens,
+-                'work': work,
+-                'sample_response': sample_response['method_output']['response'],
++                'response': tokenizer.decode(outputs.sequences[0][len(prompt_ids):], skip_special_tokens=True), # 只解码新生成的部分，跳过题目和保留的推理
++                'prob_checks': prob_checks, # 保存每次检查的试探答案、分数和结束情况
++                'threshold': threshold,     # 保存用于判断提前停止的置信度门槛
++                'stopped_early': True,      # 标记为提前停止
++                'response_tokens': response_tokens, # 新生成的 token 数量
++                'work': work,               # 总工作量，包括新生成的 token 和所有检查点的 token 数量
++                'sample_response': sample_response['method_output']['response'],    # 保存前置方法的回答，方便后续分析
+             }
+     
+-    # Did not stop early, return original response
++    # 如果遍历完所有检查点都没有超过门槛，则返回前置方法的回答，并记录所有检查点的结果
++    
++    # 计算前置方法的回答的 token 数量
+     response_tokens = len(tokenizer.encode(sample_response['method_output']['response']))
++    
++    # 计算总工作量：前置方法的回答的 token 数量 + 所有检查点的 token 数量之和
+     work = response_tokens + sum(len(prob_check['token_ids']) for prob_check in prob_checks)
+     return {
+         'response': sample_response['method_output']['response'],
+diff --git a/method_prompts.py b/method_prompts.py
+index fbfaad8a3bb7176e1c5c1b7117f9c74910fa3dec..3cf8df0c371e414ffb167aa61f55137d66aa9dfd 100644
+--- a/method_prompts.py
++++ b/method_prompts.py
+@@ -3,19 +3,24 @@ from typing import Any
+ import transformers
+ from models import generate
+ 
+-
+-def method_step_by_step(model, tokenizer, sample: dict[str, Any], B: int) -> dict[str, Any]:
++# 让模型对一道题进行普通的逐步推理，生成一份完整回答，并记录回答的 token 数
++def method_step_by_step(model, tokenizer, sample: dict[str, Any], B: int) -> dict[str, Any]:    # tokenizer：与模型配套的分词器，负责文字与token ID之间的转换；sample：是一个字典（str,any），存储问题和答案；B：是一个整数，表示生成的最大token数
++                                                                                                # -> dict[str, Any]：返回一个字典
+     """Prompt the model to think step-by-step."""
+-    content = sample['question'] + "\n\nPlease reason step by step, and put your final answer within \\boxed{}."
+-    messages = [{"role": "user", "content": content}]
+-    if 'nemotron' in model.name_or_path.lower():
+-        messages = [{"role": "system", "content": f"detailed thinking on"}] + messages
+-    response = generate(
++    # content：给题目加上作答要求
++    content = sample['question'] + "\n\nPlease reason step by step, and put your final answer within \\boxed{}." # 拼接question和提示语，要求模型逐步推理，并将最终答案放在\boxed{}中，生成一个加方框的答案
++    
++    # messages：说明消息是谁说的
++    messages = [{"role": "user", "content": content}]   # 创建一个消息列表，包含一个字典，表示用户的角色和内容
++    if 'nemotron' in model.name_or_path.lower():    # 检测模型名称或加载路径（转换成小写）中是否包含"nemotron"
++        messages = [{"role": "system", "content": f"detailed thinking on"}] + messages  # 如果包含，则在消息列表前添加一个系统消息，提示模型进行详细思考
++    response = generate(    # generate函数是model.py中定义的封装函数，他内部再调用模型的model.generate(),用于生成模型的响应，传入模型、分词器、消息列表和最大token数B，并设置do_sample为True
+         model=model, tokenizer=tokenizer, messages=messages,
+-        B=B, do_sample=True
++        B=B, do_sample=True #表示使用采样生成（不采样每步取最高概率的token，采样允许其他候选按概率被选中，从而产生不同的回答路径）
+     )
+-    response_tokens = len(tokenizer.encode(response))
+-    return {"response": response, "messages": messages, 'response_tokens': response_tokens, 'work': response_tokens}
++    response_ids = tokenizer.encode(response)  # 将生成的响应文本编码为token ID列表，针对同一个分词器，token对应id是固定的
++    response_tokens = len(response_ids)  # 计算响应的token数量
++    return {"response": response, "messages": messages, 'response_tokens': response_tokens, 'work': response_tokens}# 返回模型生成的文本，发送给模型的信息，响应的token数量，以及token工作量（由于目前没有中间试探答案，这里等于响应的token数量）
+ 
+ 
+ 
+diff --git a/models.py b/models.py
+index 41571f11374205de5b27d0765e5dc1bfeb8c0db2..1d9cd3cdfa188a0f922309e8f3ff6087f9406107 100644
+--- a/models.py
++++ b/models.py
+@@ -110,32 +110,59 @@ def get_model_and_tokenizer(
+ 
+ 
+ def generate(
+-    model: AutoModelForCausalLM,
+-    tokenizer: AutoTokenizer,
++    # 定义参数的类型
++    model: AutoModelForCausalLM, # AutoModelForCausalLM用来加载模型，让模型根据已有内容来预测后续模型（这是transformerrs库中用于因果语言建模的类）
++    tokenizer: AutoTokenizer,   # AutoTokenizer用来加载模型配套分词器，将文本转换为模型可以理解的token（也是一个类）
+     messages: list,
+     B: int,
+-    return_full_text: bool = False,
+-    **kwargs,
+-) -> str:
+-    device = next(model.parameters()).device
+-    prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+-    inputs = tokenizer(prompt, return_tensors="pt", padding=True)
+-    inputs = {k: v.to(device) for k, v in inputs.items()}
++    return_full_text: bool = False, # 是否返回完整文本，默认为False
++    **kwargs,   # 其他关键字参数，用于传递给模型生成函数；没有参数的时候就是空字段；**表示接受的参数用字典保存
++) -> str:       # 返回类型是字符串
++    device = next(model.parameters()).device # model.parameters()返回模型的参数迭代器，next()取出其中第一个参数，.device获取该参数所在的设备（CPU或GPU）
++    # 整体意思是查看模型第一个参数在哪个设备上，后面把输入数据也放到这个设备上。
++    prompt = tokenizer.apply_chat_template( #apply_chat_template是tokenizer的一个方法，用于将消息列表转换为模型可以理解的输入格式
++        messages, # 传入的消息列表
++        tokenize=False, # 应用聊天模板后返回字符串，暂不转换成 token ID
++        add_generation_prompt=True  # 添加生成提示，告诉模型接下来需要生成文本
++    )
++    inputs = tokenizer( # inputs是一个字典，包含了模型需要的输入张量;通常包含input_ids、attention_mask（标记哪些位置是有效信息，哪些是填充位置）等
++        prompt, # 传入的字符串
++        return_tensors="pt", # 为了交给模型处理，返回PyTorch张量格式
++        padding=True # 对输入进行填充，使得所有输入序列长度一致，便于批处理
++    )
++    """
++    下面的代码是对上面inputs的替代方案，使用apply_chat_template直接返回张量格式
++    inputs = tokenizer.apply_chat_template(
++        messages,
++        tokenize=True,
++        add_generation_prompt=True,
++        return_tensors="pt",
++        padding=True,
++        return_dict=True
++    )
++    """
+     
+-    gen_kwargs = {
+-        "max_new_tokens": B,
+-        "pad_token_id": tokenizer.pad_token_id,
+-        "eos_token_id": tokenizer.eos_token_id,
+-        **kwargs,
+-    }
++    inputs = {k: v.to(device) for k, v in inputs.items()} # 将inputs字典中的每个张量移动到模型所在的设备上（CPU或GPU），确保输入数据和模型在同一设备上进行计算
+     
+-    with torch.no_grad():
+-        outputs = model.generate(**inputs, **gen_kwargs)
++    gen_kwargs = {  # 构建参数字典，传递给模型的生成函数
++        "max_new_tokens": B,    # 最多生成B个新token，不包含输入的提示词
++        "pad_token_id": tokenizer.pad_token_id, # 填充token的ID，用于对齐输入序列
++        "eos_token_id": tokenizer.eos_token_id, # 结束token的ID，用于指示生成结束
++        **kwargs,   # 最后的 **kwargs 可以覆盖前面设置的同名参数
++    }
+     
++    with torch.no_grad():   # 在这个上下文中，禁用梯度计算，节省内存和计算资源，因为生成文本时不需要反向传播（训练模型才需要计算梯度更新参数）
++        outputs = model.generate(**inputs, **gen_kwargs)    # 调用模型的generate方法生成文本，把input（输入）和gen_kwargs（生成设置）两个字典展开，传入里面多个参数，返回生成的输出张量outputs，其中包含输入提示的 token + 新生成的 token（的ID）
+     if return_full_text:
+-        return tokenizer.decode(outputs[0], skip_special_tokens=True)
++        return tokenizer.decode(    # 将生成的token ID转换回可读文本
++            outputs[0], # 取出outputs张量的第一个元素（因为outputs是一个批次，可能包含多个生成结果，这里只取第一个）
++            skip_special_tokens=True    # 跳过特殊token（如<pad>、<eos>等），只返回可读文本
++        )
+     else:
+-        input_length = inputs["input_ids"].shape[1]
++        input_length = inputs["input_ids"].shape[1] # 获取输入的token长度，inputs["input_ids"]是一个二维张量（有几条输入+每条输入有哪些token），shape[1]表示第二维的长度，即输入序列的长度
+         return tokenizer.decode(
+-            outputs[0][input_length:], skip_special_tokens=True
++            outputs[0][input_length:], # 只解码新生成的token部分，跳过输入提示的token
++            skip_special_tokens=True
+         )
++
++# inputs是装着输入张量的字典，outputs是模型生成的输出张量，tokenizer.decode()将token ID转换为可读文本。
+\ No newline at end of file
