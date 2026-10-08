@@ -163,3 +163,44 @@ stdout 与 `events.jsonl` 同步给出模型加载、预热、每 64 主 tokens�
 加载、16-token预热和判分单列；请求实时记录每64个主tokens，保存完整答案、token/probability、分项计时、显存和前后身份校验。OOM或异常仅保存该次失败，不自动重试/降预算/切精度；普通RequestError保留部分生成证据，无法获得引擎部分记录的中断诚实标记缺失并保留已有events。完成后用原严格判分器单独评分，再与旧a03相同seed的主轨迹前缀核对。
 
 32768是允许的上限，不保证每次自然生成都达到该长度；单题成功不证明主表准确率或任何调度收益。
+
+
+## 固定10题开发成本试跑与tmux托管
+
+`scripts/run_online_development.py` 复用已完成的same-KV、真实分支、合成容量和a07长轨迹证据。按冻结pilot20原顺序排除 `math/train/algebra/566` 与 `math/train/geometry/428`，取余下前10题，记录0-based来源行和原ID，编号dev01–dev10。历史q001/q002不是原JSONL的前两行，不按行号猜身份。
+
+每题固定Vanilla、dense CoDE、fixed(interval4)、adaptive既有默认配置，四配置按题循环换序，共40请求。主预算32768、probe上限21、最终补答上限30，master42/rollout0；同题共享主随机种子，每请求重建私有采样流、KV与控制器。此轮用于开发成本和执行诊断，不做参数搜索。旧异常复核包继续pending，新输出仍按原严格协议判分。
+
+入口无题目、配置、种子或预算覆盖选项。`--inspect-only` 仅验证文件；`--preflight-tokenizer-only` 使用已缓存的固定tokenizer，禁用Torch/TensorFlow/Flax，不加载权重。实际运行再次检查全部题目的 `prompt + 32768 + reserve <= model context`。旧容量只测过q002的151-token prompt；新题更长部分是这次真实试跑的范围，不按长度筛题、缩预算或假称已有容量实测。
+
+在新的**GPU服务器release目录**中执行，前置路径沿用上一节相应真实结果：
+
+```bash
+"$CODESTOP_PREP_ROOT/.venv/bin/python" scripts/run_online_development.py \
+  --data-dir "$CODESTOP_PREP_ROOT/data/benchmarks" \
+  --data-manifest-sha256 ae236d14cfa3b5cfbf434163386fea878016355051313ccdbd11d0a309eebca7 \
+  --gate-summary "$SAME_KV_RUN/summary.json" \
+  --capacity-root "$CAPACITY_RUN" \
+  --natural-run-root "$Q002_8192_RUN" \
+  --natural-run-root "$NATURAL_BOUNDARIES_RUN" \
+  --long-context-root "$Q002_LONG_RUN" \
+  --model-dir "$CODESTOP_MODEL_DIR" \
+  --preflight-tokenizer-only
+```
+
+总墙钟上限7200秒，涵盖模型加载、预热、请求和中间I/O；每请求上限1800秒，与总时限同时生效。计算/解码操作前检查，正在执行的CUDA kernel不可抢占。失败、OOM或超时终止矩阵并保存partial，无自动重试。每请求独立保存 `requests/devNN/configuration/request.json` 和 `final-answer.json`，再append+fsync到 `answers.jsonl`；结束时另存完整 `final_answers.jsonl` 与40请求分母的summary。未执行请求单列。
+
+长任务使用**服务器tmux**，不能在Mac上的tmux里只包一个SSH命令。当前私有release中的 `supervise_development.py`、`launch-arguments.json`、`predeclared-plan.json` 均纳入部署hash：服务器依次执行生成、独立严格判分、完成回执，console/log和结果均落远端磁盘。托管脚本不会覆盖旧目录或自动重跑；即使生成非零退出，若已发布答案文件，也对已执行行按 `--planned-count 40` 判分。
+
+```bash
+# 在GPU服务器上；SESSION与RELEASE使用本次已核验的新会话/目录。
+tmux new-session -d -s "$SESSION" -c "$RELEASE" \
+  "$CODESTOP_PREP_ROOT/.venv/bin/python" -u "$RELEASE/supervise_development.py"
+tmux ls
+tmux attach -t "$SESSION"
+# 查看后按Ctrl-b，再按d，退出查看而保持任务运行。
+```
+
+Mac休眠、关闭终端或SSH断开后，服务器tmux继续运行；服务器自身停机或重启不在该保障范围。重新连接后读 `console.log`、`runs/development10-001/events.jsonl` 与 `completion.json`。completion分别记录生成和判分退出码，并在收尾核查部署身份；summary中的生成完成不代替后续判分成功。
+
+报告所有已执行请求的耗时、失败partial和未执行覆盖，另列完整四配置配对。若时间上限只留下部分完整题，不能用幸存题均值代表全部10题或主测试；10题顺序也不保证覆盖全部题型和长短轨迹。判分未决、人工复核pending与执行失败分别统计，保持原始结果不回写。

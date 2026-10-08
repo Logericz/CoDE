@@ -2,7 +2,9 @@
 
 更新：2026-10-08，北京时间。用途：供新对话或云端工作区接手研究。路径均相对于 CoDE 仓库根目录，执行命令前先确认当前位置。本文是当前迁移总入口；旧交接中的执行状态按其记录时间理解，不覆盖本文的更新。
 
-**当前接续点（2026-10-08，15:41续验完成）：五个保存前缀的新/原 probe 在同一份逐 token KV 上 exact 一致，q002 的 0/1/2 probe 隔离通过；跨完整前缀重算仍有差异，而且 q001 第二点会改变默认停止决定。旧失败保留。q002 已完成 dense/Vanilla/fixed/adaptive 四个8192-token有界在线请求：fixed实际跳过3个候选，adaptive因不完整probe退回dense。三个CoDE答案1995错误；Vanilla已有boxed=997但重复think，严格判分待复核。**
+**当前接续点（2026-10-08 16:11）：固定10个新开发题×Vanilla/dense/fixed/adaptive，共40请求，已在服务器tmux `codestop-dev10-20261008-a08` 启动。总上限7200秒、单请求1800秒，失败或超时即停，不重跑；严格判分和完成回执由服务器随后自行执行。Mac可休眠。先检查此会话及a08的completion/summary，不重复启动。最新状态见 `results/development10-cost-pilot-20261008.md`；当前不是MATH500主实验或80/120调参。**
+
+**上一阶段接续点（2026-10-08，15:41续验完成）：五个保存前缀的新/原 probe 在同一份逐 token KV 上 exact 一致，q002 的 0/1/2 probe 隔离通过；跨完整前缀重算仍有差异，而且 q001 第二点会改变默认停止决定。旧失败保留。q002 已完成 dense/Vanilla/fixed/adaptive 四个8192-token有界在线请求：fixed实际跳过3个候选，adaptive因不完整probe退回dense。三个CoDE答案1995错误；Vanilla已有boxed=997但重复think，严格判分待复核。**
 
 **32K合成容量已通过；其中probe实际生成7token、上限21，补答实际30token，峰值已分配17.21 GiB。** 新a06在固定合成题上覆盖了真实模型自然EOS、自然思考关闭处预算耗尽、非空答案正文开始后预算耗尽，三请求均通过；旧512-token未覆盖记录保留。新的有界32K入口已执行原q002 Vanilla一次：自然结束于10136主tokens（9136思考+1000自然答案），394.491秒，严格判分997正确；前8192采样记录与旧运行exact一致。实际没有生成满32K。6条保存答案的独立复核包已准备，裁决全部pending。当前不扩到完整实验；下一步完成统一异常裁决和有界多题入口，再定10–20个固定开发题测速。
 
@@ -43,7 +45,7 @@
 | 保存结果诊断、数学判分、调度纯逻辑 | 本轮CPU发现262项，258通过4跳过；此前专用判分25项全通过 | 6条保存答案复核包全部pending，原严格分保留 |
 | 共同在线推理组件 | 同KV五点exact/隔离、q002早停及合成题三种真实自然边界通过 | 跨完整前缀不等价；合成题分支不证明数据集准确率 |
 | 有界入口、论文主表 | 8192四配置已完成；固定q002 Vanilla 32K上限入口已通过一次10136-token自然结束请求 | 尚不是多题多配置主实验入口；主表保留 `TBD` |
-| 当前 GPU | 单卡 RTX 4090，24564 MiB；a07已完成，结束空闲 | 约10K自然轨迹通过；自然满32K及多题测速未验，租价/余额未核验 |
+| 当前 GPU | 单卡 RTX 4090，24564 MiB；a08开发40请求由服务器tmux运行中 | 先核当前会话/完成回执，不重复启动；租价/余额未核验 |
 
 ### 已有 GPU 证据摘要
 
@@ -394,7 +396,7 @@ CUDA_VISIBLE_DEVICES=0 .venv/bin/python scripts/run_pilot_diagnostics.py run --l
 >
 > 先清点你能访问的稿件、代码和服务器原始记录。仅clone得不到未跟踪的论文、新pilot脚本和远端结果。延续原稿和固定数据，不从零规划。
 >
-> 先读results/online-natural-boundaries-20261008.md、results/online-continuation-20261008.md、docs/ONLINE_REFERENCE_CONTRACT.md及旧验收/补答审计。q001已有正确boxed=2008，不重新生成。最新同KV五点exact/隔离、q002四配置8192有界运行及32K合成容量完成；跨完整前缀仍不等价。q002三个CoDE为1995错误，Vanilla含boxed997但重复think待复核。旧512合成题未自然结束记录保留；新4096上限三请求已覆盖真实自然EOS、关闭处预算和非空答案正文预算。原q002 Vanilla在32K上限下自然结束于10136token、394.491秒，严格判分997正确；前8192与旧轨迹exact一致；6条答案复核包全部pending。不直接开完整矩阵。
+> 先读results/development10-cost-pilot-20261008.md并检查服务器tmux已有任务/完成回执，避免重复启动；再读results/online-natural-boundaries-20261008.md、results/online-continuation-20261008.md、docs/ONLINE_REFERENCE_CONTRACT.md及旧验收/补答审计。q001已有正确boxed=2008，不重新生成。最新同KV五点exact/隔离、q002四配置8192有界运行及32K合成容量完成；跨完整前缀仍不等价。q002三个CoDE为1995错误，Vanilla含boxed997但重复think待复核。旧512合成题未自然结束记录保留；新4096上限三请求已覆盖真实自然EOS、关闭处预算和非空答案正文预算。原q002 Vanilla在32K上限下自然结束于10136token、394.491秒，严格判分997正确；前8192与旧轨迹exact一致；6条答案复核包全部pending。不直接开完整矩阵。
 >
 > 从现有online_contract、online_engine、online_protocol、torch_online_backend和run_online_diagnostic接续，保留双EOS集合、token答案区间、独立判分及新目录身份。以最新报告区别已覆盖GPU路径和待验收项；先读完单题长轨迹结果并完成一致的异常答案处理，再决定固定开发小样本；不得把合成容量或单题通过写成整体通过。沿用已明确的执行授权；云端缺少服务器访问时先推进不依赖GPU的工作，并指出准确缺项，不宣称已接管服务器。
 >
