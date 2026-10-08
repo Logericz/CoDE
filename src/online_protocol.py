@@ -303,9 +303,15 @@ class Decision:
     timing_diagnostics: tuple[str, ...]
     schedule_rng_identity: str | None
     seed_schedule: int | None
+    stopping_enabled: bool = True
 
     @property
     def should_stop(self) -> bool:
+        return self.stopping_enabled and bool(self.stop_reasons)
+
+    @property
+    def would_stop(self) -> bool:
+        """Predicate outcome, including a diagnostic that deliberately continues."""
         return bool(self.stop_reasons)
 
 
@@ -323,7 +329,12 @@ probe. Calls after a stopping decision or at an unscheduled candidate are errors
 
     def __init__(self, config: ProtocolConfig = ProtocolConfig(),
                  schedule: ScheduleConfig = ScheduleConfig(), *,
-                 seed_schedule: int | None = None):
+                 seed_schedule: int | None = None, stop_enabled: bool = True):
+        if type(stop_enabled) is not bool:
+            raise ProtocolError("stop_enabled must be boolean")
+        if not stop_enabled and schedule.kind != "dense":
+            raise ProtocolError("disabled stopping is restricted to dense diagnostic collection")
+        self.stop_enabled = stop_enabled
         if schedule.kind == "random" and (type(seed_schedule) is not int or seed_schedule < 0):
             raise ProtocolError("the random schedule requires an explicit nonnegative seed")
         if schedule.kind != "random" and seed_schedule is not None:
@@ -413,7 +424,7 @@ in history for the next valid signal difference.
                and self._ema_reason > 0 else None)
         forced: list[str] = []
         margin = activity = h_signal = h_cost = h_next = None
-        if reasons:
+        if reasons and self.stop_enabled:
             self._next_j = None
         else:
             if not observation.confidence_valid:
@@ -465,4 +476,4 @@ in history for the next valid signal difference.
                         signal_delta, cost_delta, self._ema_probe, self._ema_reason, rho,
                         margin, activity, h_signal, h_cost, h_next, self._next_j,
                         tuple(forced), timing_diagnostics, self.schedule_rng_identity,
-                        self.seed_schedule)
+                        self.seed_schedule, self.stop_enabled)
