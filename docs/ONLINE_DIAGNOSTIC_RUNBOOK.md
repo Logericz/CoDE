@@ -110,15 +110,17 @@ stdout 与 `events.jsonl` 同步给出模型加载、预热、每 64 主 tokens�
 
 ## 合成题上的真实自然边界
 
-`scripts/validate_online_boundaries.py` 使用固定问题 `Compute 1 + 1.`、seed=872 和默认 512 主 tokens。先要求真实采样自然关闭思考并输出 EOS；仅当成功时，以记录的 `closing_token_index+1` 为主预算重跑，核对主采样 token、概率、阶段与位置精确一致，并验证不注入前缀、只续写最多 30 个答案 tokens。这个边界是自然关闭思考的当下，不证明已经生成非空自然答案正文后才耗尽预算的情形。
+`scripts/validate_online_boundaries.py` 使用固定问题 `Compute 1 + 1.`、seed=872，默认512主tokens，允许运行前明确指定1024或4096。先要求真实采样自然关闭思考并输出EOS；成功后，第二请求以 `closing_token_index+1` 为预算，第三请求以“首个使自然答案前缀解码后非空白的非控制、非EOS token的index+1”为预算。正文定位只跳过空白，不使用gold，要求后面仍有自然EOS，整段自然答案不得含额外控制标记。
+
+两个重复请求都必须与第一条相应主采样前缀精确一致（token、概率、阶段及位置），不注入前缀，仅贪心续写最多30个答案tokens。这样分别验证自然关闭思考当下、以及非空答案正文已经开始后的预算分支。首次主预算固定在manifest中，不因未结束而自动增加或换seed。
 
 ```bash
 "$CODESTOP_PREP_ROOT/.venv/bin/python" -u scripts/validate_online_boundaries.py \
   --model-dir "$CODESTOP_MODEL_DIR" \
-  --run-root runs/natural-boundaries-001
+  --run-root runs/natural-boundaries-4096-001 --max-main-tokens 4096
 ```
 
-命令在新的远端独立部署目录执行。未覆盖时退出码 2、记录第一条结果和第二条未执行；不自动加预算、换种子或强制 token。它只验证真实模型执行分支，来源明确标为合成题，不进入数据集准确率或速度结果。实际本轮固定 512 请求没有自然结束，见续验报告。
+命令在新的远端独立部署目录执行。未覆盖时退出码2，分别保存已执行请求、已覆盖分支、未执行数量和总体状态；后续失败不能抹掉前面的真实覆盖，但代码身份变化会使证据不再满足前置门槛。它只验证真实模型执行分支，来源标为合成题，不进入数据集准确率或速度结果。旧a05固定512请求未自然结束的记录保持原样；4096是另行预声明的新运行。
 
 ## 合成 32K 缓存容量
 
@@ -139,3 +141,25 @@ stdout 与 `events.jsonl` 同步给出模型加载、预热、每 64 主 tokens�
   --run-root runs/capacity-32k-001 --chunk-size 128 \
   --independent-capacity-diagnostic
 ```
+
+## 固定q002的32K自然生成验收入口
+
+`scripts/run_online_long_context.py` 是独立的单题工程入口，固定已暴露q002、Vanilla、master seed42/rollout0，只允许明确指定32768主tokens，最终补答仍限30。原8192入口上限不变。它要求五点same-KV及64-token隔离门槛、实际早停/自然EOS/答案阶段预算三个分支、原32K合成容量、冻结数据、当前核心源码与执行环境均匹配；缺少任何前置证据即拒绝启动，无独立诊断绕过选项。
+
+所有命令在新远端独立部署目录执行。先加 `--inspect-only` 做纯读取检查；移除该参数才加载GPU。容量验收的7-token probe和有限显存余量原样披露，不保证未观察到的最长probe路径。
+
+```bash
+"$CODESTOP_PREP_ROOT/.venv/bin/python" -u scripts/run_online_long_context.py \
+  --data-dir "$CODESTOP_PREP_ROOT/data/benchmarks" \
+  --data-manifest-sha256 ae236d14cfa3b5cfbf434163386fea878016355051313ccdbd11d0a309eebca7 \
+  --gate-summary /root/autodl-tmp/codestop-online-continuation-20261008-a03/runs/same-kv-five-prefixes-001/summary.json \
+  --capacity-root /root/autodl-tmp/codestop-online-continuation-20261008-a05/runs/capacity-32k-001 \
+  --natural-run-root /root/autodl-tmp/codestop-online-continuation-20261008-a03/runs/online-q002-8192-001 \
+  --natural-run-root /root/autodl-tmp/codestop-online-continuation-20261008-a06/runs/natural-boundaries-4096-001 \
+  --max-new-tokens 32768 --model-dir "$CODESTOP_MODEL_DIR" \
+  --run-root runs/online-q002-32768-001
+```
+
+加载、16-token预热和判分单列；请求实时记录每64个主tokens，保存完整答案、token/probability、分项计时、显存和前后身份校验。OOM或异常仅保存该次失败，不自动重试/降预算/切精度；普通RequestError保留部分生成证据，无法获得引擎部分记录的中断诚实标记缺失并保留已有events。完成后用原严格判分器单独评分，再与旧a03相同seed的主轨迹前缀核对。
+
+32768是允许的上限，不保证每次自然生成都达到该长度；单题成功不证明主表准确率或任何调度收益。

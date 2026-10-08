@@ -2,11 +2,11 @@
 
 更新：2026-10-08，北京时间。用途：供新对话或云端工作区接手研究。路径均相对于 CoDE 仓库根目录，执行命令前先确认当前位置。本文是当前迁移总入口；旧交接中的执行状态按其记录时间理解，不覆盖本文的更新。
 
-**当前接续点（2026-10-08 15:03）：五个保存前缀的新/原 probe 在同一份逐 token KV 上 exact 一致，q002 的 0/1/2 probe 隔离通过；跨完整前缀重算仍有差异，而且 q001 第二点会改变默认停止决定。旧失败保留。q002 已完成 dense/Vanilla/fixed/adaptive 四个8192-token有界在线请求：fixed实际跳过3个候选，adaptive因不完整probe退回dense。三个CoDE答案1995错误；Vanilla已有boxed=997但重复think，严格判分待复核。**
+**当前接续点（2026-10-08，15:41续验完成）：五个保存前缀的新/原 probe 在同一份逐 token KV 上 exact 一致，q002 的 0/1/2 probe 隔离通过；跨完整前缀重算仍有差异，而且 q001 第二点会改变默认停止决定。旧失败保留。q002 已完成 dense/Vanilla/fixed/adaptive 四个8192-token有界在线请求：fixed实际跳过3个候选，adaptive因不完整probe退回dense。三个CoDE答案1995错误；Vanilla已有boxed=997但重复think，严格判分待复核。**
 
-**32K 合成缓存容量及满长 probe/补答通过，峰值已分配17.21 GiB；这不等于32K自然生成或整体GPU验收通过。** 固定合成题的512-token自然边界尝试未自然结束，第二条依赖请求未执行；真实自然EOS和自然思考关闭处预算分支仍待覆盖。当前不扩到完整实验。下一步先完成边界验收和一致的补答异常裁决，再做正式32K生产入口及固定开发小样本测速，按实测成本决定规模。
+**32K合成容量已通过；其中probe实际生成7token、上限21，补答实际30token，峰值已分配17.21 GiB。** 新a06在固定合成题上覆盖了真实模型自然EOS、自然思考关闭处预算耗尽、非空答案正文开始后预算耗尽，三请求均通过；旧512-token未覆盖记录保留。新的有界32K入口已执行原q002 Vanilla一次：自然结束于10136主tokens（9136思考+1000自然答案），394.491秒，严格判分997正确；前8192采样记录与旧运行exact一致。实际没有生成满32K。6条保存答案的独立复核包已准备，裁决全部pending。当前不扩到完整实验；下一步完成统一异常裁决和有界多题入口，再定10–20个固定开发题测速。
 
-最新报告：`results/online-continuation-20261008.md`；数值契约：`docs/ONLINE_REFERENCE_CONTRACT.md`；命令：`docs/ONLINE_DIAGNOSTIC_RUNBOOK.md`。q001旧boxed=2008及原判分不变，不重新生成寻找答案。a03/a05证据分别69/58文件已取回逐项核hash；261个既有远端文件不变。结束时GPU空闲、0MiB；启动下次运行前仍须重新检查。
+最新报告：`results/online-natural-boundaries-20261008.md`；上一轮报告：`results/online-continuation-20261008.md`；数值契约：`docs/ONLINE_REFERENCE_CONTRACT.md`；命令：`docs/ONLINE_DIAGNOSTIC_RUNBOOK.md`。q001旧boxed=2008及原判分不变，不重新生成寻找答案。a03/a05证据分别69/58文件已取回逐项核hash；261个既有远端文件不变。本轮a06/a07新增证据分别14/15文件取回核hash；434个既有远端文件不变。15:41:16检查GPU空闲、0MiB；下次仍须重新检查。
 
 本文合并了 `docs/CONVERSATION_HANDOFF_20261008.md` 的执行记录，取代本文件原 2026-10-07 状态快照。最近已成功登录服务器，取回 q001/q002 等 33 个文件并逐项核对 SHA-256，又用原服务器 tokenizer 独立解码 CoDE 补答。教学题等未取回部分仍以用户回传日志为依据。详细交接可作为补充携带，本文可独立恢复任务背景。
 
@@ -38,12 +38,12 @@
 | 依赖、模型、MATH 数据准备 | 用户报告服务器已完成 | 检查已有清单，优先复用 |
 | 教学 GPU 链路 | `runs/gpu-smoke-001/` 四阶段完成 | 不重复同一验收 |
 | 开发诊断 | `runs/pilot20-diagnostic-8192/` 的 q001、q002 完成，failed=0 | 阶段完成不等于答案正确 |
-| 当前优先问题 | q001旧记录及新q002 Vanilla都存在正确boxed后重复think | 冻结跨方法一致的异常裁决，保留原严格needs_review |
+| 当前优先问题 | q001旧记录及q002的8192预算Vanilla存在正确boxed后重复think；新长轨迹严格正确 | 冻结跨方法一致的异常裁决，保留原严格needs_review |
 | 稀疏调度收益 | 新q002 fixed跳3个候选，少1次probe却更晚停；adaptive未稀疏 | 单题不能证明总体收益，后续开发集验证 |
-| 保存结果诊断、数学判分、调度纯逻辑 | 已接入真实记录；最终CPU发现224项，220通过4跳过；专用判分25项全通过 | 保留未裁决异常，正式判分协议尚需冻结 |
-| 共同在线推理组件 | 同KV五点exact/隔离及q002真实早停通过 | 跨完整前缀不等价；真实自然EOS和自然关闭处预算分支未覆盖 |
-| 有界入口、论文主表 | 单题入口和逐请求保存/判分已完成；正式32K及主实验待做 | 主表保留 `TBD`，暂不扩量 |
-| 当前 GPU | 单卡 RTX 4090，24564 MiB；32K合成缓存容量通过；结束时空闲 | 32K自然生成与正式配置速度待测，租价/余额未核验 |
+| 保存结果诊断、数学判分、调度纯逻辑 | 本轮CPU发现262项，258通过4跳过；此前专用判分25项全通过 | 6条保存答案复核包全部pending，原严格分保留 |
+| 共同在线推理组件 | 同KV五点exact/隔离、q002早停及合成题三种真实自然边界通过 | 跨完整前缀不等价；合成题分支不证明数据集准确率 |
+| 有界入口、论文主表 | 8192四配置已完成；固定q002 Vanilla 32K上限入口已通过一次10136-token自然结束请求 | 尚不是多题多配置主实验入口；主表保留 `TBD` |
+| 当前 GPU | 单卡 RTX 4090，24564 MiB；a07已完成，结束空闲 | 约10K自然轨迹通过；自然满32K及多题测速未验，租价/余额未核验 |
 
 ### 已有 GPU 证据摘要
 
@@ -51,7 +51,7 @@
 - **q001** `math/train/algebra/566`，标准答案 2008：base 2442 tokens、65.7289 秒；Vanilla/DEER 回答正确。CoDE 第二次 probe confidence=0.9375、ended=true，超过当时 ramp 阈值 0.925，于位置 989 早停。补答用满 30 tokens；独立解码确认先生成完整 `\boxed{2008}`，之后又生成 `</think>` 并开始解释。旧 `rsplit` 遗漏了此前答案；严格判分仍因重复标记记为 needs_review，原记录保留。
 - **q002** `math/train/geometry/428`，标准答案 997：base 用满 8192 tokens、215.5112 秒。DEER 五次 probe 均未 ended，未早停。CoDE 第三次退化分数 2.5050895895837346>2，于位置 5331 早停。Vanilla/DEER 输出 2996、CoDE 输出 2992，均错误，不能归为单纯格式问题。
 
-置信早停和退化早停均有真实执行记录。当前 DEER/CoDE 基于 Vanilla 文本回放，`cp_cache=false`，每次 probe 重复预填充；阶段耗时不含基础生成。停止位置不能直接除以 base token 数计算正式节约率。停止后未执行的 probe 也不是完整密集采集。
+置信早停和退化早停均有真实执行记录。上述旧pilot的DEER/CoDE基于Vanilla文本回放，`cp_cache=false`，每次 probe 重复预填充；阶段耗时不含基础生成。停止位置不能直接除以 base token 数计算正式节约率。停止后未执行的 probe 也不是完整密集采集。
 
 另有历史 AIME Vanilla pilot：RTX 5090、Qwen3-4B BF16，10 题各生成一次，8 对 2 错，132,356 completion tokens，累计 2,943.931 秒，见稿件 `README_CN.md`。本轮未重读历史归档；其缺少逐步 probe／退化记录，不能证明当前服务器速度或正式准确率。
 
@@ -127,7 +127,7 @@
 - probe 贪心，保留固定实现最多 21 个生成 token 及原概率语义；原方案计划统一最终补答最多 30 token；当前补答异常须在正式冻结前处理，这项规格尚未验收。协议变化显式说明。
 - 主推理与探测 KV 分支隔离，主推理与随机日程使用独立随机流；不能因多做 probe 而改变主推理随机序列。
 - 请求计时覆盖 prefill、主推理、probe、缓存准备/恢复、最终答案及必要控制开销。记录准确率、平均耗时、probe 数、token、显存及失败分类。
-- 本地 Math-Verify 0.9.0 独立判分已通过抽取、比较方向、异常与硬超时测试；已对 q001/q002 CoDE 保存的受控答案区间运行：q001 为边界 needs_review，q002 为 incorrect；正式在线结果接入仍待做。原版 API 判分属于另一协议，不混表。
+- 本地 Math-Verify 0.9.0 独立判分已通过抽取、比较方向、异常与硬超时测试；已对 q001/q002 CoDE 保存的受控答案区间运行：q001 为边界 needs_review，q002 为 incorrect；新在线逐请求答案已接入独立严格判分；异常裁决仍待冻结。原版 API 判分属于另一协议，不混表。
 - 按题进行配对分析和 bootstrap，两个种子属于同题聚类。开发阶段 2pp 筛选条件不等于已证明准确率无损。
 - 离线反事实诊断可复用记录，但不作为在线加速证据。
 
@@ -194,7 +194,7 @@ API 能做适配后的信号/服务成本研究，但网络、排队、重复 pr
 | `ccfa-review-reports/when-to-probe-coling2027-review.md` | 稿件问题清单，尚未跟踪 |
 | `AGENTS.md`、`UPSTREAM.json`、`requirements-diagnostic.txt`、`src/`、`configs/`、`scripts/`、`tests/` | 固定参考、工程入口、依赖和测试，完整迁移其相互依赖 |
 | `src/online_contract.py`、`src/online_engine.py`、`tests/test_online_engine.py` | 已保存的新共同在线接口与状态机；与 `online_protocol.py` 的最新修改一起携带，不能只取接口文件或只取旧提交 |
-| `src/torch_online_backend.py`、`tests/test_torch_online_backend.py` | 已保存的 Torch 后端与 CPU 小模型测试；尚未真实 CUDA/BF16 验收，不在旧基线提交中 |
+| `src/torch_online_backend.py`、`tests/test_torch_online_backend.py` | Torch后端已有CPU与限定范围真实GPU验收；完整前缀差异仍保留，范围见最新报告 |
 | 新增 `run_pilot_diagnostics.py`、`prepare_gpu_data.py`、`setup_gpu_server.sh`、`configure_gpu_remote.sh` | 均位于 scripts/，尚未跟踪；已有环境不自动重跑安装 |
 | `requirements-gpu-prep.txt`、`docs/GPU_PREP_COMMANDS.md` | 准备依赖与说明，尚未跟踪 |
 | `tests/test_pilot_diagnostics.py`、`tests/test_prepare_gpu_data.py` | 新增 CPU 工程检查，尚未跟踪 |
@@ -260,7 +260,7 @@ b6bc991f2c382f1962a8581c013f0de6ef598768aec8682375e84929712926cc  tests/test_onl
 
 ### 共同在线组件的接续工作
 
-`src/online_contract.py` 定义统一模型版本、标记和后端接口；`src/online_engine.py` 已实现生成、探测、提前退出及最终答案区间。`src/torch_online_backend.py` 已保存真实模型、KV 分支和采样实现，生产构造要求本地固定 revision、CUDA/BF16 及指定版本，不自行下载模型；CPU 测试使用显式标注 synthetic 的 tiny 随机模型。现已完成q002的1024及8192有界真实GPU请求、同KV五点exact/隔离，以及32K合成容量；完整前缀数值不等价、真实自然结束分支和32K自然生成仍待验，范围见最新续验报告。新组件与旧回放 core 分开，不能覆盖被冻结的 pilot 实现。
+`src/online_contract.py` 定义统一模型版本、标记和后端接口；`src/online_engine.py` 已实现生成、探测、提前退出及最终答案区间。`src/torch_online_backend.py` 已保存真实模型、KV 分支和采样实现，生产构造要求本地固定 revision、CUDA/BF16 及指定版本，不自行下载模型；CPU 测试使用显式标注 synthetic 的 tiny 随机模型。现已完成q002的1024及8192有界真实GPU请求、同KV五点exact/隔离，以及32K合成容量；完整前缀数值不等价仍保留；合成题三种真实自然边界已覆盖，固定q002 32K上限请求在10136token自然结束且严格正确，范围见最新续验报告。新组件与旧回放 core 分开，不能覆盖被冻结的 pilot 实现。
 
 需要保留的实现约定：
 
@@ -271,7 +271,7 @@ b6bc991f2c382f1962a8581c013f0de6ef598768aec8682375e84929712926cc  tests/test_onl
 - `dense_collect_no_stop` 密集记录停止谓词但继续生成。控制器仅允许 dense 日程关闭停止；`would_stop` 与实际 `should_stop` 分开记录。这属于采集成本，不是主表早停速度。
 - CPU 合成小模型测试只验证接口与工程性质；原模型 BF16 数值、实际 CUDA KV 行为和墙钟必须在 GPU 上验收。
 
-**`scripts/run_online_diagnostic.py` 已实现九种可选工程配置，并完成q002单题1024-token三配置及8192-token四配置运行。** 入口冻结数据身份和代码哈希、按题与rollout派生独立种子、单卡单请求、显式token上限、新结果目录和GPU UUID锁、逐请求原子保存、失败部分记录、原始输出与完整计时。另有 `scripts/validate_online_gpu.py` 做保存前缀的数值及隔离验收。命令与答案边界见 `docs/ONLINE_DIAGNOSTIC_RUNBOOK.md`。该入口最多8192主tokens，不是“一键主实验”；32K合成容量已通过，但真实自然结束分支和正式32K生产入口仍待验，不直接扩量。
+**`scripts/run_online_diagnostic.py` 已实现九种可选工程配置，并完成q002单题1024-token三配置及8192-token四配置运行。** 入口冻结数据身份和代码哈希、按题与rollout派生独立种子、单卡单请求、显式token上限、新结果目录和GPU UUID锁、逐请求原子保存、失败部分记录、原始输出与完整计时。另有 `scripts/validate_online_gpu.py` 做保存前缀的数值及隔离验收。命令与答案边界见 `docs/ONLINE_DIAGNOSTIC_RUNBOOK.md`。该入口最多8192主tokens。新 `scripts/run_online_long_context.py` 只允许原q002/Vanilla/32768，严格校验same-KV、三分支和容量证据；不是通用主实验入口。已通过单次q002自然结束验收（10136token），尚不代表自然满32K或多题多配置验收，不直接扩量。
 
 fixed/log/random 在有效但未结束的 probe 后保持预设日程；只有 adaptive/backoff 使用 incomplete 回退。所有家族共享 invalid/有效历史不足三条的密集回退。自然提前停止仍可发生在第三次之前。
 
@@ -346,7 +346,7 @@ CUDA_VISIBLE_DEVICES=0 .venv/bin/python scripts/run_pilot_diagnostics.py run --l
 
 `inspect` 会重写 summary.json，不是严格只读；退出码0也可能有 incomplete，须核对 requested completed/failed/incomplete 与逐题记录。
 
-现有入口仍为工程回放，上限8192；不能把 JSON 改为32768就当作正式在线后端。相关 CPU 测试本轮审计通过：pilot 6项、数据准备4项；这是工程证据，不是 GPU 或在线速度验收。
+本小节的旧 `run_pilot_diagnostics.py` 入口仍为工程回放，上限8192；不能把 JSON 改为32768就当作正式在线后端。相关 CPU 测试本轮审计通过：pilot 6项、数据准备4项；这是工程证据，不是 GPU 或在线速度验收。
 
 ## 8. 后续任务及验收
 
@@ -354,8 +354,8 @@ CUDA_VISIBLE_DEVICES=0 .venv/bin/python scripts/run_pilot_diagnostics.py run --l
 | --- | --- | --- |
 | 1 | q001 原因核查已完成；携带证据并明确异常边界处理 | 原始 hash、token 解码、单列审查结论与严格判分 |
 | 2 | 同KV契约五点及隔离已通过；跨完整前缀差异保留 | 原始概率、实际停止差异、源码与证据hash |
-| 3 | 补自然EOS/自然关闭处预算分支与异常答案裁决，再决定10–20题 | 未覆盖尝试不重写，另定有界计划；统一规则及完整计时 |
-| 4 | 合成容量通过后，完成正式32K生产入口与小样本验收 | 自然短中长轨迹、显存、平均/长尾耗时、实测费用 |
+| 3 | 三种自然边界已通过；完成独立异常答案裁决，再决定10–20题 | 旧未覆盖尝试保留；6条pending复核包、统一规则及完整计时 |
+| 4 | 固定q002 32K上限入口及约10K自然轨迹已验；推进有界多题开发入口 | 自然短中长轨迹、显存、平均/长尾耗时、实测费用 |
 | 5 | 冻结校准、选参和判分 | 强fixed、重校准、rescale、简单退避；测试前冻结 |
 | 6 | 在预算内完成主测试及消融 | 完整分母、逐题日志、配对统计与失败处理 |
 | 7 | 据证据更新现有论文 | 论点、结果表、配置、引用一致，未做部分如实标注 |
@@ -394,8 +394,8 @@ CUDA_VISIBLE_DEVICES=0 .venv/bin/python scripts/run_pilot_diagnostics.py run --l
 >
 > 先清点你能访问的稿件、代码和服务器原始记录。仅clone得不到未跟踪的论文、新pilot脚本和远端结果。延续原稿和固定数据，不从零规划。
 >
-> 先读results/online-continuation-20261008.md、docs/ONLINE_REFERENCE_CONTRACT.md及旧验收/补答审计。q001已有正确boxed=2008，不重新生成。最新同KV五点exact/隔离、q002四配置8192有界运行及32K合成容量完成；跨完整前缀仍不等价。q002三个CoDE为1995错误，Vanilla含boxed997但重复think待复核。固定512合成题未自然结束，真实自然EOS和自然关闭处预算分支仍缺。先处理剩余边界及正式32K小样本，不直接开完整矩阵。
+> 先读results/online-natural-boundaries-20261008.md、results/online-continuation-20261008.md、docs/ONLINE_REFERENCE_CONTRACT.md及旧验收/补答审计。q001已有正确boxed=2008，不重新生成。最新同KV五点exact/隔离、q002四配置8192有界运行及32K合成容量完成；跨完整前缀仍不等价。q002三个CoDE为1995错误，Vanilla含boxed997但重复think待复核。旧512合成题未自然结束记录保留；新4096上限三请求已覆盖真实自然EOS、关闭处预算和非空答案正文预算。原q002 Vanilla在32K上限下自然结束于10136token、394.491秒，严格判分997正确；前8192与旧轨迹exact一致；6条答案复核包全部pending。不直接开完整矩阵。
 >
-> 从现有online_contract、online_engine、online_protocol、torch_online_backend和run_online_diagnostic接续，保留双EOS集合、token答案区间、独立判分及新目录身份。以最新报告区别已覆盖GPU路径和待验收项；先补剩余分支和一致的异常答案处理，再验正式32K自然生成；不得把合成容量通过写成整体通过。沿用已明确的执行授权；云端缺少服务器访问时先推进不依赖GPU的工作，并指出准确缺项，不宣称已接管服务器。
+> 从现有online_contract、online_engine、online_protocol、torch_online_backend和run_online_diagnostic接续，保留双EOS集合、token答案区间、独立判分及新目录身份。以最新报告区别已覆盖GPU路径和待验收项；先读完单题长轨迹结果并完成一致的异常答案处理，再决定固定开发小样本；不得把合成容量或单题通过写成整体通过。沿用已明确的执行授权；云端缺少服务器访问时先推进不依赖GPU的工作，并指出准确缺项，不宣称已接管服务器。
 >
 > 用中文说明第一条关键链路，只将可追溯真实结果写入论文，分别报告修改、测试、提交、推送和GPU验证。继续现有main.tex，不另起替代稿。

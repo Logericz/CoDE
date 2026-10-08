@@ -59,3 +59,19 @@ runs/grading-validation/venv/bin/python -m unittest discover \
 ```
 
 测试包含真实 Math-Verify 的整数、分数、根式、集合、区间、错误答案、解析失败，以及思考区间拒绝、最后 boxed、未闭合尾部、完整分母、重复 ID、子进程超时、只写新报告。未安装指定包时真实集成测试明确跳过，其他测试仍可执行；跳过不是集成通过。
+
+## 独立待复核材料
+
+`scripts/prepare_answer_review.py` 只准备人工边界复核资料，不执行数学判分或边界裁决。对运行前声明的一个或多个输入JSONL纳入全部已执行行，不按gold、旧分或是否看起来正确筛选。跨输入请求ID必须唯一；有重名时应分开创建包，不修改原记录来掩盖身份。
+
+```bash
+python3 scripts/prepare_answer_review.py \
+  --input runs/remote-evidence-20261008/codestop-final-answers-strict.jsonl \
+  --input runs/online-continuation-20261008/remote-a03-online/runs/online-q002-8192-001/final_answers.jsonl \
+  --output-dir runs/online-boundaries-20261008/answer-review-001 \
+  --scope development-exposed
+```
+
+只向边界复核者提供 `reviewer/`：随机case ID、随机顺序、完整未删改的answer_text及空白裁决模板。`private/`和根manifest保留原始身份、gold、输入与产物hash，不随reviewer目录提供。表达式定位使用原文零基Unicode字符半开区间，先封存逐字表达式及边界判断，再解盲交Math-Verify；不自动接受重复think，不删除尾部、不挑选匹配gold的数字，也不回写旧严格报告。
+
+所有条目初始均为pending。当前支持的范围仅为已暴露开发样例：我们已经见过2008/997等结果，去标识资料不能使当前助手成为真正盲审者；文本本身也可能让知情审查者识别样例。因此资料准备不代表复核完成或正式效果确认。输入文件前后hash一致证明副本身份，原行中的source_sha256仍须结合独立token/来源审计核实。
