@@ -204,3 +204,22 @@ tmux attach -t "$SESSION"
 Mac休眠、关闭终端或SSH断开后，服务器tmux继续运行；服务器自身停机或重启不在该保障范围。重新连接后读 `console.log`、`runs/development10-001/events.jsonl` 与 `completion.json`。completion分别记录生成和判分退出码，并在收尾核查部署身份；summary中的生成完成不代替后续判分成功。
 
 报告所有已执行请求的耗时、失败partial和未执行覆盖，另列完整四配置配对。若时间上限只留下部分完整题，不能用幸存题均值代表全部10题或主测试；10题顺序也不保证覆盖全部题型和长短轨迹。判分未决、人工复核pending与执行失败分别统计，保持原始结果不回写。
+
+## 同10题的完整密集轨迹采集
+
+`scripts/run_online_dense_collection.py` 绑定已完成a08的manifest、summary及40请求哈希链，复用上节所有前置门槛。题单、模型、主随机种子、32K主上限和21/30-token probe/补答边界均保持一致。唯一运行模式为 `dense_collect_no_stop`：每个推理候选都探测，保留 `would_stop`，但不执行置信或退化早停，继续至自然EOS或预算末端。预算末端属于明确删失，不能记为自然完整轨迹。
+
+在新GPU服务器release中，沿用上节参数，将入口替换为 `scripts/run_online_dense_collection.py`，增加 `--development-run "$DEVELOPMENT_RUN"`（指向已完成的a08 `runs/development10-001`），并使用新的 `--run-root runs/dense10-001`。先分别执行 `--inspect-only` 和 `--preflight-tokenizer-only`，再由服务器tmux托管实际生成与独立严格判分。判分分母为 `--planned-count 10`。
+
+总时限7200秒、每请求1800秒；没有题目、配置、seed或预算覆盖参数。每题前核对输入身份，失败即停、不自动重试，保存partial及未执行名单。保存位置为 `requests/devNN/dense-collect-no-stop/`；scope和collection-only标记排除其进入在线性能主表。生成、判分及完成回执分别核验。采集不会修订既有未决答案或人工裁决。
+
+完成并取回核hash后，在本地运行独立离线分析：
+
+```bash
+python scripts/analyze_dense_collection.py \
+  --collection-run "$COLLECTION_RUN" \
+  --development-run "$DEVELOPMENT_RUN" \
+  --output-dir runs/dense10-20261008/analysis-001
+```
+
+分析逐题核对Vanilla完整主采样流、原dense公共probe、首次would-stop、停止后新增观测、自然终点/预算覆盖、token守恒和计时。自适应回放只读取模拟已查询点，跨跳点累加原始分段主推理时间；密集采集中的时间不能当作稀疏在线耗时，停止后的未来观测不提供给已经停止的策略。本阶段完成后先判断可稀疏机会与成本限制，再决定是否推进30题开发筛查；不自动启动80/120选参、MATH500或AIME。
