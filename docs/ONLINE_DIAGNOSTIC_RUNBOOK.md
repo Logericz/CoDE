@@ -1,6 +1,8 @@
 # 有界共同在线入口与 GPU 验收
 
-范围：一题、一个 rollout、顺序运行 Vanilla / dense CoDE / fixed CoDE。默认使用已暴露的 pilot20 q002 (`math/train/geometry/428`)；首次主预算 1024 tokens，每次最终补答最多 30 tokens，每个 probe 最多 21 tokens。此入口最多允许 8192 主 tokens，不是论文完整矩阵或 32K 容量验收入口。
+范围：一题、一个 rollout，默认顺序运行 Vanilla / dense CoDE / fixed CoDE。默认使用已暴露的 pilot20 q002 (`math/train/geometry/428`)；首次主预算 1024 tokens，每次最终补答最多 30 tokens，每个 probe 最多 21 tokens。此入口最多允许 8192 主 tokens，不是论文完整矩阵或 32K 容量验收入口。
+
+新增可选配置为 `deer-dense`、`codestop-log`、`codestop-random`、`codestop-backoff`、`codestop-adaptive`、`dense-collect-no-stop`。默认配置不变；必须显式选择扩展配置。无早停密集采集记录 would-stop 后继续，不进入在线速度主表。随机日程使用独立派生种子，所有请求保存实际参数及 `config_hash`。probe 开始/结束为实时日志；`probe_decision` 标为 `post_request_summary`，在请求返回后输出。
 
 `scripts/run_online_diagnostic.py` 验证冻结 manifest 的外部 SHA-256 锚点、全部数据文件、source lock、题号、问题哈希、开发/测试隔离及子集关系。不会抽样或下载数据/模型。运行目录必须不存在；同一物理 GPU 的 UUID 锁跨目录共享，发现已有计算进程即拒绝运行。
 
@@ -88,3 +90,52 @@ stdout 与 `events.jsonl` 同步给出模型加载、预热、每 64 主 tokens�
 ```
 
 退出码2表示诊断完成但严格比较仍有失败；退出码1表示运行中断。结果分开报告same-KV、bulk-prefix、完整前缀及隔离，不能把其中一项通过写成总GPU验收通过。定位到前缀构建路径也不自动证明是某个BF16舍入或kernel机理。最新实测状态见 `results/online-gpu-acceptance-20261008.md`。
+
+## 五个保存前缀的同 KV 验收
+
+新的验收契约见 [ONLINE_REFERENCE_CONTRACT.md](ONLINE_REFERENCE_CONTRACT.md)。使用新目录，原完整前缀 exact 失败保持原样。固定 q001 两点和 q002 三点；同 KV 新/原 probe 精确一致与隔离为当前门槛，完整前缀另作敏感性对照。停止历史按题分别维护，只将仍在思考阶段的 Wait 计为在线候选。
+
+以下命令在**新的远端独立部署目录**运行。`--inspect-only` 先检查原始证据/identity/源码，随后移除该参数并提供模型及全新输出路径才执行 CUDA：
+
+```bash
+"$CODESTOP_PREP_ROOT/.venv/bin/python" -u scripts/validate_online_continuation.py \
+  --evidence-root "$CODESTOP_PREP_ROOT/runs/pilot20-diagnostic-8192" \
+  --identity-root /root/autodl-tmp/codestop-online-acceptance-20261008-a02/runs/parity-diagnosis-001 \
+  --upstream-source-dir upstream/CoDE-Stop \
+  --model-dir "$CODESTOP_MODEL_DIR" \
+  --run-root runs/same-kv-five-prefixes-001
+```
+
+每个前缀最多三条 21-token probe 路径；另在 q002 首点插入 0/1/2 次 probe 后各续写最多 64 tokens。保存逐概率差异、默认停止判定及草稿阈值网格的离线敏感性。该网格只复用已测概率，不是重新调参或新增在线方法结果。源码、输入及身份在运行前后检查，失败或中断保留已完成证据。
+
+## 合成题上的真实自然边界
+
+`scripts/validate_online_boundaries.py` 使用固定问题 `Compute 1 + 1.`、seed=872 和默认 512 主 tokens。先要求真实采样自然关闭思考并输出 EOS；仅当成功时，以记录的 `closing_token_index+1` 为主预算重跑，核对主采样 token、概率、阶段与位置精确一致，并验证不注入前缀、只续写最多 30 个答案 tokens。这个边界是自然关闭思考的当下，不证明已经生成非空自然答案正文后才耗尽预算的情形。
+
+```bash
+"$CODESTOP_PREP_ROOT/.venv/bin/python" -u scripts/validate_online_boundaries.py \
+  --model-dir "$CODESTOP_MODEL_DIR" \
+  --run-root runs/natural-boundaries-001
+```
+
+命令在新的远端独立部署目录执行。未覆盖时退出码 2、记录第一条结果和第二条未执行；不自动加预算、换种子或强制 token。它只验证真实模型执行分支，来源明确标为合成题，不进入数据集准确率或速度结果。实际本轮固定 512 请求没有自然结束，见续验报告。
+
+## 合成 32K 缓存容量
+
+`scripts/validate_online_capacity.py` 只用于 CUDA 显存/形状验收。它固定读取 a01 q002 Vanilla 的已保存 1024 个 thinking tokens（源码中锁定文件 SHA），循环填充 32768 tokens，默认每块 128；绝不把 32K 一次整段输入 eager attention。满长时执行真实 probe 并检查主 KV/logits/RNG 隔离，再注入 final prefix 和最多 30 个贪心补答 tokens。
+
+命令必须指定 `--source-record`、新五点验收的 `--gate-summary`、`--natural-run-root`（可多次）、模型和新运行目录。默认要求实际在线早停、自然 EOS、自然关闭思考后的预算终止都有已核验记录；后两项可以来自上述合成题真实模型工具，但记录中分别标明来源，不能冒充数据集自然终止覆盖。仅开展独立容量诊断时可显式选择 `--independent-capacity-diagnostic`；缺少的自然分支仍写为未通过，不绕过同 KV 数值门槛。`--inspect-only` 只校验计划，不加载 GPU。
+
+运行记录包括 source/gate/环境/代码身份，逐 1024 tokens 的 allocated/reserved/peak/free 显存与各层 KV 形状、满长 probe、补答及执行前后文件 hash。默认 900 秒墙钟预算在 CUDA 操作之间检查，不能抢占单个 kernel。任何错误/OOM 即保存失败并退出，不改精度、attention 或缩块重试。容量通过不能写成自然生成 32K、32K 数值等价、长轨迹准确率或在线速度通过。
+
+本轮实际容量命令使用 `--independent-capacity-diagnostic`，因为自然 EOS 和自然关闭思考的预算分支未覆盖；没有把未覆盖的运行作为通过的前置证据。
+
+```bash
+"$CODESTOP_PREP_ROOT/.venv/bin/python" -u scripts/validate_online_capacity.py \
+  --source-record /root/autodl-tmp/codestop-online-acceptance-20261008-a01/runs/online-q002-1024-001/vanilla.json \
+  --gate-summary /root/autodl-tmp/codestop-online-continuation-20261008-a03/runs/same-kv-five-prefixes-001/summary.json \
+  --natural-run-root /root/autodl-tmp/codestop-online-continuation-20261008-a03/runs/online-q002-8192-001 \
+  --model-dir "$CODESTOP_MODEL_DIR" \
+  --run-root runs/capacity-32k-001 --chunk-size 128 \
+  --independent-capacity-diagnostic
+```

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 import fcntl
 import hashlib
@@ -36,6 +36,9 @@ COUNTS = {"calibration80": 80, "selection120": 120, "pilot20": 20,
           "math500": 500, "analysis100": 100}
 DATA_SOURCES = {"EleutherAI/hendrycks_math", "HuggingFaceH4/MATH-500"}
 DEFAULT_CONFIGS = ("vanilla", "codestop-dense", "codestop-fixed")
+SUPPORTED_CONFIGS = DEFAULT_CONFIGS + (
+    "deer-dense", "codestop-log", "codestop-random", "codestop-backoff",
+    "codestop-adaptive", "dense-collect-no-stop")
 CODE_FILES = ("scripts/run_online_diagnostic.py", "src/online_contract.py",
               "src/online_engine.py", "src/online_protocol.py", "src/torch_online_backend.py",
               "src/math_grading.py", "scripts/grade_math_answers.py")
@@ -155,12 +158,45 @@ def derive_seed(master_seed, sample_id, rollout_id, domain):
     return int.from_bytes(hashlib.sha256(payload).digest()[:8], "big") % (2**63)
 
 
-def configurations(labels, fixed_interval):
-    if not labels or len(set(labels)) != len(labels) or set(labels) - set(DEFAULT_CONFIGS):
+def configurations(labels, fixed_interval, *, h_max=ScheduleConfig().h_max,
+                   beta=ScheduleConfig().beta, log_a=ScheduleConfig().log_a,
+                   random_p=ScheduleConfig().random_p, margin_m0=ScheduleConfig().margin_m0,
+                   protocol_config=ProtocolConfig()):
+    if not labels or len(set(labels)) != len(labels) or set(labels) - set(SUPPORTED_CONFIGS):
         raise ValueError("Configurations must be distinct supported labels")
-    return [{"label": label, "method": "vanilla" if label == "vanilla" else "codestop",
-             "schedule_config": ScheduleConfig(kind="fixed" if label == "codestop-fixed" else "dense",
-                                               fixed_interval=fixed_interval)} for label in labels]
+    # Validate all supplied options before any GPU or filesystem mutation. Each
+    # family's recorded configuration below contains only its applicable overrides.
+    ScheduleConfig(fixed_interval=fixed_interval, h_max=h_max, beta=beta, log_a=log_a,
+                   random_p=random_p, margin_m0=margin_m0)
+    if not isinstance(protocol_config, ProtocolConfig):
+        raise ValueError("protocol_config must be a ProtocolConfig")
+    result = []
+    for label in labels:
+        method = {"vanilla": "vanilla", "deer-dense": "deer",
+                  "dense-collect-no-stop": "dense_collect_no_stop"}.get(label, "codestop")
+        kind = label.removeprefix("codestop-") if label.startswith("codestop-") else "dense"
+        options = {"fixed": {"fixed_interval": fixed_interval},
+                   "log": {"log_a": log_a, "h_max": h_max},
+                   "random": {"random_p": random_p},  # The declared random cap stays eight.
+                   "backoff": {"margin_m0": margin_m0, "h_max": h_max},
+                   "adaptive": {"beta": beta, "h_max": h_max}}.get(kind, {})
+        result.append({"label": label, "method": method,
+                       "schedule_config": ScheduleConfig(kind=kind, **options),
+                       "protocol_config": replace(protocol_config, rule="deer" if method == "deer" else "codestop")})
+    return result
+
+
+def configuration_record(config, *, seed_reason, seed_schedule, max_new_tokens, attention_implementation):
+    """Hash the exact declared request settings, including the independent RNGs."""
+    record = {"label": config["label"], "method": config["method"],
+              "protocol_config": asdict(config["protocol_config"]),
+              "schedule_config": asdict(config["schedule_config"]),
+              "seed_reason": seed_reason,
+              "seed_schedule": seed_schedule if config["schedule_config"].kind == "random" else None,
+              "max_new_tokens": max_new_tokens, "attention_implementation": attention_implementation,
+              "model_revision": MODEL_REVISION,
+              "stopping_enabled": config["method"] not in ("vanilla", "dense_collect_no_stop")}
+    return {**record, "config_hash": hashlib.sha256(encoded(record)).hexdigest()}
 
 
 def command_output(command):
@@ -283,7 +319,11 @@ def run_diagnostic(args, *, backend_factory=None):
         raise ValueError("Diagnostic --max-new-tokens must be explicit and in [1,8192]")
     if not 0 <= args.master_seed < 2**63 or args.rollout_id < 0:
         raise ValueError("master-seed must be in [0,2**63); rollout-id must be nonnegative")
-    configs = configurations(args.configurations, args.fixed_interval)
+    configs = configurations(args.configurations, args.fixed_interval, h_max=args.h_max,
+                             beta=args.beta, log_a=args.log_a, random_p=args.random_p,
+                             margin_m0=args.margin_m0,
+                             protocol_config=ProtocolConfig(r_max=args.r_max, tau=args.tau,
+                                                            deer_threshold=args.deer_threshold))
     row, data_identity = verify_data(args.data_dir, args.data_manifest_sha256, args.sample_id)
     run_root = args.run_root.expanduser().absolute()
     if run_root.exists() or run_root.is_symlink():
@@ -300,20 +340,25 @@ def run_diagnostic(args, *, backend_factory=None):
         code_hashes = {name: sha256(ROOT / name) for name in CODE_FILES}
         reason_seed = derive_seed(args.master_seed, row["id"], args.rollout_id, "reason")
         schedule_seed = derive_seed(args.master_seed, row["id"], args.rollout_id, "schedule")
+        config_records = [configuration_record(config, seed_reason=reason_seed, seed_schedule=schedule_seed,
+                                                max_new_tokens=args.max_new_tokens,
+                                                attention_implementation=args.attention_implementation)
+                          for config in configs]
         manifest = {"schema_version": 1, "scope": SCOPE, "runner_protocol": RUNNER_PROTOCOL,
                     "model_id": MODEL_ID, "model_revision": MODEL_REVISION,
                     "sample_id": row["id"], "problem_sha256": row["problem_sha256"],
                     "question_count": 1, "rollout_id": args.rollout_id, "planned_count": len(configs),
                     "max_new_tokens": args.max_new_tokens, "master_seed": args.master_seed,
                     "seed_reason": reason_seed, "reserved_schedule_seed": schedule_seed,
-                    "schedule_rng_used": False,
+                    "schedule_rng_used": any(config["schedule_config"].kind == "random" for config in configs),
+                    "schedule_rng_used_semantics": "random schedule configured; actual draws depend on observed candidates",
                     "seed_algorithm": "online-diagnostic-seed-v1 / SHA256 first 8 bytes mod 2**63; domain separated",
-                    "configurations": [{**config, "schedule_config": asdict(config["schedule_config"])} for config in configs],
-                    "protocol_config": asdict(ProtocolConfig()), "data_identity": data_identity,
+                    "configurations": config_records, "data_identity": data_identity,
                     "code_sha256": code_hashes, "gpu": gpu, "gpu_lock": lock_path,
                     "warmup": {"main_tokens": 16, "max_final_tokens": 30, "method": "vanilla",
                                "includes_probe_warmup": False, "included_in_measured_requests": False},
                     "logging": {"main_progress_every": 64, "probe_start_end": True,
+                                "probe_decisions": "post_request_summary",
                                 "synchronous_logging_overhead_in_request_timing": True},
                     "grading": "separate scripts/grade_math_answers.py invocation; never inside request timer"}
         atomic_new(run_root / "manifest.json", manifest)
@@ -344,16 +389,19 @@ def run_diagnostic(args, *, backend_factory=None):
                 raise
             atomic_new(run_root / "warmup.json", {**warmup, "scope": "excluded_warmup"})
             log.emit("warmup_completed", elapsed_ms=warmup["time_total_ms"])
-            for config in configs:
+            for config, config_record in zip(configs, config_records):
                 label = config["label"]
                 log.emit("request_start", configuration=label, method=config["method"],
-                         schedule=config["schedule_config"].kind, seed_reason=reason_seed)
+                         schedule=config["schedule_config"].kind, seed_reason=reason_seed,
+                         seed_schedule=config_record["seed_schedule"], config_hash=config_record["config_hash"])
                 try:
                     result = run_request(ProgressBackend(backend, log, label), question=row["problem"],
                                          sample_id=row["id"], rollout_id=args.rollout_id,
                                          method=config["method"], seed_reason=reason_seed,
-                                         seed_schedule=None,  # Dense/fixed have no stochastic schedule.
-                                         max_new_tokens=args.max_new_tokens, schedule_config=config["schedule_config"])
+                                         seed_schedule=config_record["seed_schedule"],
+                                         max_new_tokens=args.max_new_tokens,
+                                         protocol_config=config["protocol_config"],
+                                         schedule_config=config["schedule_config"])
                 except RequestError as error:
                     result = error.partial
                     failure = {"type": type(error).__name__, "message": str(error), "configuration": label}
@@ -367,7 +415,10 @@ def run_diagnostic(args, *, backend_factory=None):
                     failure = {"type": type(error).__name__, "message": str(error), "configuration": label}
                 result.update(configuration=label, scope=SCOPE, eligible_for_primary_speed_comparison=False,
                               schedule_config=asdict(config["schedule_config"]),
-                              protocol_config=asdict(ProtocolConfig()), backend_metadata=backend.metadata)
+                              protocol_config=asdict(config["protocol_config"]),
+                              seed_schedule=config_record["seed_schedule"],
+                              config_hash=config_record["config_hash"], request_configuration=config_record,
+                              backend_metadata=backend.metadata)
                 if "peak_memory_bytes" not in result:
                     try:
                         result["peak_memory_bytes"] = backend.peak_memory_bytes()
@@ -375,6 +426,13 @@ def run_diagnostic(args, *, backend_factory=None):
                         result["peak_memory_error"] = type(memory_error).__name__
                 source_path = run_root / f"{label}.json"
                 atomic_new(source_path, result)
+                # The engine owns decisions and returns them only after the request;
+                # these are retrospective summaries, unlike probe_start/probe_end.
+                for probe in result.get("probes", []):
+                    if "decision" in probe:
+                        log.emit("probe_decision", timing="post_request_summary", configuration=label,
+                                 decision=probe["decision"], would_stop=probe.get("would_stop"),
+                                 should_stop=probe.get("should_stop"), stop_applied=probe.get("stop_applied"))
                 try:
                     answer = answer_record(result, source_path, row["answer"], backend, label)
                 except Exception as export_error:
@@ -426,8 +484,19 @@ def parser():
     result.add_argument("--run-root", type=Path, required=True, help="new directory only; no resume or overwrite")
     result.add_argument("--sample-id", default=DEFAULT_SAMPLE, help="exact pilot20 source ID; default already-exposed q002")
     result.add_argument("--max-new-tokens", type=int, required=True, help="explicit main token cap, 1..8192; first acceptance 1024")
-    result.add_argument("--configurations", nargs="+", choices=DEFAULT_CONFIGS, default=list(DEFAULT_CONFIGS))
-    result.add_argument("--fixed-interval", type=int, default=4, help="fixed candidate interval after shared warmup, 1..9")
+    result.add_argument("--configurations", nargs="+", choices=SUPPORTED_CONFIGS, default=list(DEFAULT_CONFIGS))
+    schedule, protocol = ScheduleConfig(), ProtocolConfig()
+    result.add_argument("--fixed-interval", type=int, default=schedule.fixed_interval,
+                        help="fixed candidate interval after shared warmup, 1..9")
+    result.add_argument("--h-max", type=int, default=schedule.h_max,
+                        help="log/backoff/adaptive cap: 2, 4, or 8; random always has cap 8")
+    result.add_argument("--beta", type=float, default=schedule.beta, help="adaptive cost target: 0.25, 0.5, or 1")
+    result.add_argument("--log-a", type=float, default=schedule.log_a, help="log schedule coefficient: 0.5, 1, or 2")
+    result.add_argument("--random-p", type=float, default=schedule.random_p, help="capped geometric probability from declared grid")
+    result.add_argument("--margin-m0", type=float, default=schedule.margin_m0, help="backoff margin: 0.02, 0.05, or 0.10")
+    result.add_argument("--r-max", type=float, default=protocol.r_max, help="CoDE maximum confidence threshold")
+    result.add_argument("--tau", type=float, default=protocol.tau, help="CoDE positive degeneration threshold")
+    result.add_argument("--deer-threshold", type=float, default=protocol.deer_threshold, help="DEER confidence threshold")
     result.add_argument("--rollout-id", type=int, default=0)
     result.add_argument("--master-seed", type=int, default=42)
     result.add_argument("--attention-implementation", choices=("eager", "sdpa"), default="eager")

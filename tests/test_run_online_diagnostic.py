@@ -193,6 +193,7 @@ class RunnerTests(unittest.TestCase):
         self.assertTrue(all(question == "Synthetic selection problem 0" for question in backend.questions[1:]))
         dense = runner.read_json(root / "codestop-dense.json")
         fixed = runner.read_json(root / "codestop-fixed.json")
+        self.assertFalse(runner.read_json(root / "manifest.json")["schedule_rng_used"])
         self.assertEqual(dense["n_probes"], 4)
         self.assertEqual(fixed["n_probes"], 3)
         self.assertEqual(dense["main_samples"], fixed["main_samples"])
@@ -209,6 +210,95 @@ class RunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "already exists"):
             runner.run_diagnostic(args, backend_factory=lambda *a, **kw: backend)
         self.assertEqual((root / "manifest.json").read_bytes(), before)
+
+    def test_all_families_keep_actual_configs_hashes_and_independent_random_seed(self):
+        args = self.args("--configurations", *runner.SUPPORTED_CONFIGS, "--max-new-tokens", "40",
+                         "--h-max", "4", "--beta", "0.25", "--log-a", "2", "--random-p", "0.2",
+                         "--margin-m0", "0.1", "--r-max", "0.98", "--tau", "4", "--deer-threshold", "0.97")
+        backend = SyntheticBackend()
+        with self.mocked_gpu():
+            self.assertEqual(runner.run_diagnostic(args, backend_factory=lambda *a, **kw: backend), 0)
+        manifest = runner.read_json(args.run_root / "manifest.json")
+        self.assertEqual(manifest["planned_count"], len(runner.SUPPORTED_CONFIGS))
+        self.assertTrue(manifest["schedule_rng_used"])
+        self.assertEqual(len(set(backend.seeds[1:])), 1)
+        vanilla = runner.read_json(args.run_root / "vanilla.json")
+        for config in manifest["configurations"]:
+            result = runner.read_json(args.run_root / f"{config['label']}.json")
+            self.assertEqual(result["request_configuration"], config)
+            self.assertEqual(result["protocol_config"], config["protocol_config"])
+            self.assertEqual(result["schedule_config"], config["schedule_config"])
+            declared = {key: value for key, value in config.items() if key != "config_hash"}
+            self.assertEqual(result["config_hash"], runner.hashlib.sha256(runner.encoded(declared)).hexdigest())
+            self.assertFalse(result["eligible_for_primary_speed_comparison"])
+            self.assertEqual(result["main_samples"], vanilla["main_samples"])
+            expected_rule = "deer" if config["label"] == "deer-dense" else "codestop"
+            self.assertEqual(result["protocol_config"]["rule"], expected_rule)
+            self.assertEqual(result["protocol_config"]["r_max"], 0.98)
+            self.assertEqual(result["protocol_config"]["deer_threshold"], 0.97)
+            if config["label"] == "codestop-random":
+                self.assertEqual(result["seed_schedule"], manifest["reserved_schedule_seed"])
+                self.assertNotEqual(result["seed_schedule"], result["seed_reason"])
+                self.assertEqual(result["schedule_config"]["h_max"], 8)
+                self.assertEqual(result["schedule_config"]["random_p"], 0.2)
+                self.assertTrue(any(probe["decision"]["h_next"] > 1 for probe in result["probes"]))
+            else:
+                self.assertIsNone(result["seed_schedule"])
+            if config["label"] in ("codestop-log", "codestop-backoff", "codestop-adaptive"):
+                self.assertEqual(result["schedule_config"]["h_max"], 4)
+        events = [json.loads(line) for line in (args.run_root / "events.jsonl").read_text().splitlines()]
+        decisions = [event for event in events if event["event"] == "probe_decision"]
+        self.assertTrue(decisions)
+        self.assertTrue(all(event["timing"] == "post_request_summary" for event in decisions))
+        for label in runner.SUPPORTED_CONFIGS[1:]:
+            last_probe = max(index for index, event in enumerate(events)
+                             if event.get("configuration") == label and event["event"] == "probe_end")
+            first_decision = next(index for index, event in enumerate(events)
+                                  if event.get("configuration") == label and event["event"] == "probe_decision")
+            self.assertGreater(first_decision, last_probe)
+
+    def test_deer_stops_but_dense_collection_preserves_would_stop_and_continues(self):
+        backend = SyntheticBackend()
+        backend.probe = lambda state: ProbeObservation((31, 32, END), (0.99, 0.99, 0.99), 0.99, True,
+                                                       confidence_source="synthetic_cpu_fixture")
+        args = self.args("--configurations", "deer-dense", "dense-collect-no-stop")
+        with self.mocked_gpu():
+            self.assertEqual(runner.run_diagnostic(args, backend_factory=lambda *a, **kw: backend), 0)
+        deer = runner.read_json(args.run_root / "deer-dense.json")
+        dense = runner.read_json(args.run_root / "dense-collect-no-stop.json")
+        self.assertEqual(deer["method"], "deer")
+        self.assertEqual(deer["protocol_config"]["rule"], "deer")
+        self.assertEqual(deer["n_probes"], 1)
+        self.assertTrue(deer["probes"][0]["stop_applied"])
+        self.assertEqual(dense["method"], "dense_collect_no_stop")
+        self.assertEqual(dense["n_probes"], 4)
+        self.assertEqual(dense["stop_reason"], "budget")
+        self.assertTrue(all(probe["would_stop"] and not probe["stop_applied"] for probe in dense["probes"]))
+        self.assertFalse(dense["request_configuration"]["stopping_enabled"])
+        self.assertFalse(dense["eligible_for_primary_speed_comparison"])
+
+    def test_random_schedule_repeats_queries_without_changing_main_stream(self):
+        records = []
+        for repeat in range(2):
+            args = self.args("--configurations", "codestop-random", "--max-new-tokens", "40",
+                             "--random-p", "0.2", "--run-root", str(self.base / f"repeat-{repeat}"))
+            with self.mocked_gpu():
+                self.assertEqual(runner.run_diagnostic(args, backend_factory=SyntheticBackend), 0)
+            records.append(runner.read_json(args.run_root / "codestop-random.json"))
+        self.assertEqual(records[0]["main_samples"], records[1]["main_samples"])
+        self.assertEqual([probe["decision"]["candidate_j"] for probe in records[0]["probes"]],
+                         [probe["decision"]["candidate_j"] for probe in records[1]["probes"]])
+        self.assertEqual(records[0]["config_hash"], records[1]["config_hash"])
+
+    def test_new_options_validate_before_gpu_and_original_defaults_stay_bounded(self):
+        self.assertEqual(self.args().configurations, ["vanilla", "codestop-dense", "codestop-fixed"])
+        for option in (("--h-max", "3"), ("--beta", "nan"), ("--random-p", "0.33"),
+                       ("--tau", "0"), ("--r-max", "0.1")):
+            with self.subTest(option=option), patch.object(runner, "gpu_inventory") as gpu:
+                with self.assertRaises(ValueError):
+                    runner.run_diagnostic(self.args(*option))
+                gpu.assert_not_called()
+        self.assertFalse((self.base / "new-run").exists())
 
     def test_failed_request_keeps_partial_and_denominator_stops_later_requests(self):
         backend = SyntheticBackend(fail_request=3)
