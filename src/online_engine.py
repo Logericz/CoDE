@@ -27,7 +27,7 @@ from online_protocol import (
     ProtocolController, ScheduleConfig,
 )
 
-ENGINE_VERSION = "1.0.0"
+ENGINE_VERSION = "1.1.0"
 FINAL_TOKEN_CAP = 30
 METHODS = ("vanilla", "deer", "codestop", "dense_collect_no_stop")
 
@@ -161,7 +161,7 @@ and must remain a diagnostic artifact, never an online-speed method result.
             item["generation_index"] = len(final_samples)
             final_samples.append(item)
             pending = {"phase": "finalization", **item}
-            if sample.token_id == backend.markers.eos:
+            if sample.token_id in backend.markers.eos_ids:
                 output_ids.append(sample.token_id)
                 pending = None
                 finalization_end = "eos"
@@ -208,7 +208,7 @@ and must remain a diagnostic artifact, never an online-speed method result.
             main_samples.append(item)
             pending = {"phase": "main", **item}
             token = sample.token_id
-            if token == backend.markers.eos:
+            if token in backend.markers.eos_ids:
                 output_ids.append(token)
                 accepted_main += 1
                 pending = None
@@ -244,7 +244,7 @@ and must remain a diagnostic artifact, never an online-speed method result.
                     event["queried"] = True
                     if observation.ended_with_think != bool(observation.token_ids and observation.token_ids[-1] == backend.markers.end_think):
                         raise ValueError("Probe ended_with_think does not match its actual last token")
-                    if backend.markers.eos in observation.token_ids:
+                    if any(token in backend.markers.eos_ids for token in observation.token_ids):
                         observation = replace(observation, invalid_reason="probe_contains_eos")
                     cost = CostObservation(probe_elapsed_ms=probe_ms,
                                            reason_elapsed_ms=reason_since_query if previous_query else None)

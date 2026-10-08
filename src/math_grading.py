@@ -20,6 +20,7 @@ import time
 
 
 PROTOCOL_VERSION = "math-answer-only-v1"
+BOUNDARY_CHECK_VERSION = "explicit-answer-boundary-v1"
 REQUIRED_VERSIONS = {
     "math-verify": "0.9.0", "antlr4-python3-runtime": "4.13.2",
     "latex2sympy2_extended": "1.11.0", "sympy": "1.14.0", "mpmath": "1.3.0",
@@ -153,6 +154,8 @@ def validate_records(records: list[dict], planned_count: int) -> None:
             raise ValueError(f"row {number}: source_sha256 must be 64 hexadecimal characters")
         if "boundary_policy" in record and (not isinstance(record["boundary_policy"], str) or not record["boundary_policy"].strip()):
             raise ValueError(f"row {number}: boundary_policy must be a nonempty description if supplied")
+        if "answer_boundary_confirmed" in record and type(record["answer_boundary_confirmed"]) is not bool:
+            raise ValueError(f"row {number}: answer_boundary_confirmed must be a boolean if supplied")
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -298,11 +301,15 @@ def grade_record(record: dict, timeout_seconds: float = 10.0) -> dict:
               "answer_text_sha256": hashlib.sha256(record["answer_text"].encode()).hexdigest(),
               "source_sha256": record.get("source_sha256"),
               "boundary_policy": record.get("boundary_policy", "unknown"),
+              "answer_boundary_confirmed": record.get("answer_boundary_confirmed"),
+              "boundary_check_version": BOUNDARY_CHECK_VERSION,
               "provenance_status": "caller_asserted_not_independently_verified" if record.get("source_sha256") else "unknown"}
     if "stop_reason" in record:
         result["stop_reason"] = record["stop_reason"]
     if result["execution_status"] == "failed":
         result.update(status="run_failure", reason="caller_reported_execution_failure", grade=None)
+    elif record.get("answer_boundary_confirmed") is False:
+        result.update(status="needs_review", reason="answer_boundary_unconfirmed", grade=None)
     else:
         extraction = extract_final_answer(record["answer_text"])
         result.update(extraction)

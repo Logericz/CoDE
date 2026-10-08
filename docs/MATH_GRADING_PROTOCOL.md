@@ -12,6 +12,10 @@
 
 可选字段：`execution_status` 为 `completed`（默认）或 `failed`；`stop_reason` 原样记录；`source_sha256` 为原始证据文件的 SHA-256；`boundary_policy` 描述边界来源，例如已保存的答案前缀 token 范围与新增答案 token 范围。省略来源时报告 `provenance_status=unknown`、省略边界说明时报告 `boundary_policy=unknown`。即使提供了 hash，判分器也只记录调用方声明，不宣称独立认证原始证据或区间来源。
 
+共同在线入口还必须提供布尔字段 `answer_boundary_confirmed`。`false` 产生 `needs_review / answer_boundary_unconfirmed`，不进入数学比较；`true` 仍须通过重复 think 等原有检查。执行失败优先记为 `run_failure`。旧输入省略该字段时保留原有调用方声明语义；报告新增 `boundary_check_version=explicit-answer-boundary-v1`，原判分和保存结果不回写。
+
+在线入口从保存的 `answer_token_ids` 解码，只按 token ID 去掉唯一末尾终止 EOS，随后使用 `skip_special_tokens=False`；另存剔除 EOS 的区间证据。不依赖普通显示解码对特殊符号的过滤，也不得按最后一个 think 标记重新切分。正常 EOS 的移除不改变数学答案，区间内的重复标记仍保留并触发严格复核。已保存 q001 的固定 tokenizer 在两种解码模式下都保留重复 `</think>`；这里明确的是入口契约，并非声称该 tokenizer 曾删除它。
+
 **注入前缀属于答案区间的一部分。** 若 runner 已注入 `The final answer is \boxed`，新生成 token 只有 `{2008}`，调用方必须提供已保存的答案前缀与生成内容构成的 `\boxed{2008}` 区间，不能仅提交新 token，也不能在结果出来后根据 gold 补造前缀。边界证据应能指向原始 token／文本记录。不要用 `rsplit('</think>')` 从任意整段回复中选取一段；重复 thinking 标记或异常关闭必须先做边界审计。
 
 出现 `<think>`、`</think>`、analysis／reasoning 标签及相应渠道标记（包括部分未闭合和重复标记）的文本直接记为 `needs_review`，不会扫描其中的 boxed 或正确数字。调用方漏掉所有标记却仍把思考全文放进 `answer_text`，无法由本模块自动证明其区间错误，因此边界审计仍是上游责任。

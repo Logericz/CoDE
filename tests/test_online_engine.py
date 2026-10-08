@@ -87,6 +87,45 @@ def run(backend, **kwargs):
 
 
 class EngineTests(unittest.TestCase):
+    def test_secondary_eos_terminates_main_and_finalization_without_rescue(self):
+        secondary_eos = 16
+        for path in ("main", "finalization"):
+            with self.subTest(path=path):
+                backend = Backend([7, secondary_eos] if path == "main" else [7],
+                                  answer=(VALUE, secondary_eos))
+                backend.markers = TokenMarkers(WAIT, END, EOS, (PREFIX,), (END, PREFIX),
+                                               eos_ids=(EOS, secondary_eos))
+                result = run(backend, method="vanilla")
+                self.assertEqual(result["output_token_ids"][-1], secondary_eos)
+                self.assertNotIn((secondary_eos,), backend.extended)
+                if path == "main":
+                    self.assertEqual(result["stop_reason"], "natural_eos")
+                    self.assertEqual(backend.greedy_count, 0)
+                    self.assertFalse(result["answer_boundary_confirmed"])
+                else:
+                    self.assertEqual(result["finalization_end"], "eos")
+                    self.assertEqual(result["finalization_tokens"], 2)
+
+    def test_secondary_eos_invalidates_probe_in_engine(self):
+        secondary_eos = 16
+        raw = ProbeObservation((31, secondary_eos, END), (0.5, 0.5, 0.5), 0.99, True)
+        backend = Backend([7, WAIT, EOS], [raw])
+        backend.markers = TokenMarkers(WAIT, END, EOS, (PREFIX,), (END, PREFIX),
+                                       eos_ids=(EOS, secondary_eos))
+        result = run(backend)
+        decision = result["probes"][0]["decision"]
+        self.assertEqual(decision["observation"]["invalid_reason"], "probe_contains_eos")
+        self.assertFalse(result["probes"][0]["should_stop"])
+        self.assertEqual(result["stop_reason"], "natural_eos")
+
+    def test_marker_eos_defaults_deduplication_and_conflicts(self):
+        self.assertEqual(Backend.markers.eos_ids, (EOS,))
+        markers = TokenMarkers(WAIT, END, EOS, (PREFIX,), (END, PREFIX), eos_ids=(16, EOS, 16))
+        self.assertEqual(markers.eos_ids, (EOS, 16))
+        for ids in ((WAIT,), (END,), (True,), (-1,), None):
+            with self.subTest(ids=ids), self.assertRaises(ValueError):
+                TokenMarkers(WAIT, END, EOS, (PREFIX,), (END, PREFIX), eos_ids=ids)
+
     def test_natural_eos_never_rescued_even_on_budget(self):
         backend = Backend([7, EOS])
         result = run(backend)

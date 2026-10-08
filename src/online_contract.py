@@ -12,7 +12,7 @@ from online_protocol import ProbeObservation
 
 MODEL_ID = "Qwen/Qwen3-4B"
 MODEL_REVISION = "1cfa9a7208912126459214e8b04321603b3df60c"
-RUNNER_PROTOCOL = "common-online-validation-v1"
+RUNNER_PROTOCOL = "common-online-validation-v2"
 TRIAL_PREFIX = "\n**Final Answer**\n\nThe final answer is \\boxed"
 FINAL_PREFIX = "</think>" + TRIAL_PREFIX
 TASK_SUFFIX = "\n\nPlease reason step by step, and put your final answer within \\boxed{}."
@@ -25,6 +25,7 @@ class TokenMarkers:
     eos: int
     trial_prefix: tuple[int, ...]
     final_prefix: tuple[int, ...]
+    eos_ids: tuple[int, ...] = ()
 
     def __post_init__(self):
         for value in (self.wait, self.end_think, self.eos):
@@ -32,6 +33,15 @@ class TokenMarkers:
                 raise ValueError("markers must be nonnegative integer token IDs")
         if len({self.wait, self.end_think, self.eos}) != 3:
             raise ValueError("Wait, end-think, and EOS must have distinct token IDs")
+        if not isinstance(self.eos_ids, (list, tuple)) or any(
+                type(value) is not int or value < 0 for value in self.eos_ids):
+            raise ValueError("EOS IDs must be nonnegative integer token IDs")
+        # Keep the tokenizer's primary EOS for existing callers while recognizing
+        # every termination token declared by the model's generation config.
+        eos_ids = tuple(dict.fromkeys((self.eos, *self.eos_ids)))
+        if self.wait in eos_ids or self.end_think in eos_ids:
+            raise ValueError("EOS IDs must not include Wait or end-think")
+        object.__setattr__(self, "eos_ids", eos_ids)
         for name in ("trial_prefix", "final_prefix"):
             ids = tuple(getattr(self, name))
             if not ids or any(type(x) is not int or x < 0 for x in ids):

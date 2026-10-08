@@ -90,6 +90,30 @@ class ExtractionAndAccountingTests(unittest.TestCase):
         self.assertEqual(result["boundary_policy"], "unknown")
         self.assertEqual(result["provenance_status"], "unknown")
 
+    def test_explicit_unconfirmed_boundary_never_reaches_verifier(self):
+        with patch.object(grading, "_run_worker") as worker:
+            result = grading.grade_record(record(answer_boundary_confirmed=False))
+        worker.assert_not_called()
+        self.assertEqual(result["status"], "needs_review")
+        self.assertEqual(result["reason"], "answer_boundary_unconfirmed")
+        self.assertIsNone(result["grade"])
+        self.assertFalse(result["answer_boundary_confirmed"])
+        self.assertEqual(result["boundary_check_version"], "explicit-answer-boundary-v1")
+
+    def test_confirmed_boundary_still_rejects_repeated_think(self):
+        with patch.object(grading, "_run_worker") as worker:
+            result = grading.grade_record(record(r"\boxed{2}</think>", answer_boundary_confirmed=True))
+        worker.assert_not_called()
+        self.assertEqual(result["reason"], "reasoning_boundary_not_isolated")
+        self.assertTrue(result["answer_boundary_confirmed"])
+
+    def test_boundary_flag_requires_boolean_and_failure_takes_precedence(self):
+        for value in (None, 0, 1, "false"):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "boolean"):
+                grading.validate_records([record(answer_boundary_confirmed=value)], 1)
+        result = grading.grade_record(record(execution_status="failed", answer_boundary_confirmed=False))
+        self.assertEqual(result["status"], "run_failure")
+
     def test_provenance_is_preserved_but_not_claimed_verified(self):
         result = grading.grade_record(record("", source_sha256="a" * 64,
                                               boundary_policy="caller preserved injected boxed prefix and new tokens"))

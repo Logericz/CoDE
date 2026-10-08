@@ -167,12 +167,25 @@ confidence accumulation retain the model's actual output dtype.
         end_think = tokenizer.encode("</think>", add_special_tokens=False)
         if len(wait) != 1 or len(end_think) != 1:
             raise ValueError("Pinned protocol requires single-token Wait and </think> markers")
+        configured_eos = model.generation_config.eos_token_id
+        if configured_eos is None:
+            eos_ids = (tokenizer.eos_token_id,)
+            eos_source = "tokenizer.eos_token_id_fallback"
+        elif type(configured_eos) is int:
+            eos_ids = (configured_eos,)
+            eos_source = "model.generation_config.eos_token_id_with_tokenizer_primary"
+        elif isinstance(configured_eos, (list, tuple)) and configured_eos:
+            eos_ids = tuple(configured_eos)
+            eos_source = "model.generation_config.eos_token_id_with_tokenizer_primary"
+        else:
+            raise ValueError("Generation config EOS must be an integer, nonempty sequence, or None")
         self.markers = TokenMarkers(
             wait[0], end_think[0], tokenizer.eos_token_id,
             tuple(tokenizer.encode(TRIAL_PREFIX, add_special_tokens=False)),
-            tuple(tokenizer.encode(FINAL_PREFIX, add_special_tokens=False)))
+            tuple(tokenizer.encode(FINAL_PREFIX, add_special_tokens=False)), eos_ids=eos_ids)
         self.vocab_size = int(model.config.vocab_size)
         self._tokens((self.markers.wait, self.markers.end_think, self.markers.eos))
+        self._tokens(self.markers.eos_ids)
         self._tokens(self.markers.trial_prefix)
         self._tokens(self.markers.final_prefix)
         capacity = model.config.max_position_embeddings
@@ -200,7 +213,8 @@ confidence accumulation retain the model's actual output dtype.
             "context_limit": self.context_limit, "tokenizer_chat_template": tokenizer.chat_template,
             "tokenizer_class": type(tokenizer).__name__,
             "markers": {"wait": self.markers.wait, "end_think": self.markers.end_think,
-                        "eos": self.markers.eos, "trial_prefix": list(self.markers.trial_prefix),
+                        "eos": self.markers.eos, "eos_ids": list(self.markers.eos_ids),
+                        "eos_source": eos_source, "trial_prefix": list(self.markers.trial_prefix),
                         "final_prefix": list(self.markers.final_prefix)},
             "sampling": {"temperature": 0.6, "top_k": 20, "top_p": 0.95, "min_p": 0.0,
                          "logits_dtype": "torch.float32", "raw_probability_dtype": "torch.float32",
@@ -333,7 +347,8 @@ confidence accumulation retain the model's actual output dtype.
         return ProbeObservation(
             tuple(token_ids), tuple(token_probs), raw, token_ids[-1] == self.markers.end_think,
             confidence_source=f"torch_model_logits_softmax/{dtype}",
-            invalid_reason="probe_generated_eos" if self.markers.eos in token_ids else None)
+            invalid_reason="probe_generated_eos" if any(
+                token in self.markers.eos_ids for token in token_ids) else None)
 
     def decode(self, token_ids: Sequence[int], *, skip_special_tokens: bool = True) -> str:
         tokens = tuple(token_ids)

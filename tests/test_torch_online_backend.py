@@ -201,6 +201,33 @@ class TinyQwenBackendTests(unittest.TestCase):
         self.assertFalse(result.confidence_valid)
         self.assertIn("probe_generated_eos", result.invalid_reasons)
 
+    def test_generation_config_secondary_eos_invalidates_probe(self):
+        secondary_eos = 63
+        self.model.generation_config.eos_token_id = [2, secondary_eos]
+        self.backend = TorchOnlineBackend.from_test_model(self.model, self.tokenizer)
+        self.assertEqual(self.backend.markers.eos, 2)
+        self.assertEqual(self.backend.markers.eos_ids, (2, secondary_eos))
+        self.assertEqual(self.backend.metadata["markers"]["eos_ids"], [2, secondary_eos])
+        state = self.state()
+        handle = self.forced_tokens([secondary_eos])
+        try:
+            result = self.backend.probe(state)
+        finally:
+            handle.remove()
+        self.assertEqual(result.token_ids, (secondary_eos,) * 21)
+        self.assertFalse(result.confidence_valid)
+        self.assertIn("probe_generated_eos", result.invalid_reasons)
+
+    def test_generation_config_eos_fallback_and_invalid_values(self):
+        self.model.generation_config.eos_token_id = None
+        backend = TorchOnlineBackend.from_test_model(self.model, self.tokenizer)
+        self.assertEqual(backend.markers.eos_ids, (2,))
+        self.assertEqual(backend.metadata["markers"]["eos_source"], "tokenizer.eos_token_id_fallback")
+        for ids in ([], True, [True], [-1], [3], [4], [64]):
+            with self.subTest(ids=ids), self.assertRaises(ValueError):
+                self.model.generation_config.eos_token_id = ids
+                TorchOnlineBackend.from_test_model(self.model, self.tokenizer)
+
     def test_two_token_probe_keeps_legacy_raw_one_but_invalid(self):
         state = self.state()
         handle = self.forced_tokens([10, self.backend.markers.end_think])
