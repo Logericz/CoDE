@@ -1,56 +1,53 @@
 # 云端迁移交接：CoDE-Stop / When to Probe
 
-更新时间：2026-10-07，北京时间。本文是供新对话或云端执行环境接手的独立摘要。
+更新：2026-10-08，北京时间。用途：供新对话或云端工作区接手研究。路径均相对于 CoDE 仓库根目录，执行命令前先确认当前位置。
 
-**交付范围：生成迁移文件。尚未创建云端任务、迁移服务器、租用 GPU、充值 API 或启动正式实验。** 本文的预算是规划，不代表用户已授权全部支出。以下路径均相对于 CoDE 项目仓库根目录。
+**当前接续点：用户已完成一题教学 GPU 诊断和两题开发诊断。先核验 q001 的补答／答案提取，再决定是否扩到 10 题。正式在线后端、自适应调度器和论文主实验仍待完成。**
 
-## 1. 接手后先记住的决定
+本文合并了 `docs/CONVERSATION_HANDOFF_20261008.md` 的执行记录，取代本文件原 2026-10-07 状态快照。GPU 数字来自详细交接保存的用户回传日志；本轮没有取得远端完整原始文件，不能称为助手已直接复核。详细交接可作为补充携带，本文可独立恢复任务背景。
 
-- 用户明确决定继续原来的 **CoDE-Stop 探测调度与早停研究**；TokenSkip 与 CoDE-Stop 的组合已经讨论，暂不作为主线。
-- 目标会议是 **COLING 2027**。当前有论文草稿和详细实验设计，核心比较实验尚未完成。
-- 工作题目：**When to Probe: Separating Observation and Stopping in Reasoning Models**。
-- 核心问题：减少中间答案探测，既节省探测计算，也改变停止规则能看到的历史和退出机会；这些变化如何影响停止位置、正确率和真实端到端耗时？
-- 自适应调度器是候选方法，不能预设它已经有效或具备足够创新。先比较调优后的固定间隔、阈值重校准和简单退避。
-- 用户希望尽量在 **4 天内完成实验验证**。实现、环境和性能尚有待验证，因此四天是目标，不是已证实工期。
-- 当前请求没有要求把主模型换成 API 模型。GPU 与 API 只是做过预算比较，未选定并验证新的托管服务。
+本次交付是迁移文档，未创建新云端任务、搬迁服务器或启动新实验。云端工作区不自动拥有 GPU、模型缓存、服务器访问权或本地文件。
 
-### 用户协作偏好
+## 1. 已确定的方向与协作方式
 
-使用中文。用户希望亲自理解第一条关键执行链，再让助手处理重复验证、汇总和文档。提供命令时说明执行位置、用途、预期输出及失败证据。先确认命令运行在真实 GPU 主机，再检查环境；不要把云端工作区自动视为 GPU 服务器。
+- 目标：COLING 2027；现有题目 **When to Probe: Separating Observation and Stopping in Reasoning Models**。
+- 用户已决定继续 CoDE-Stop 探测调度与早停方向。TokenSkip 组合已讨论，暂不作为主线；也未决定以 API 替代 GPU 主实验。
+- 核心问题：减少中间答案探测，既改变开销，也改变停止规则看到的历史和退出机会，如何影响正确率、停止位置和端到端耗时？
+- 自适应调度仍为候选方法。先与调优 fixed、阈值重校准、rescale 和简单退避比较，不能预设有创新或收益。
+- 用户希望约 4 天内完成实验验证，这是目标，不是已测定工期。正式矩阵尚依赖后端实现、判分与性能验收。
+- 使用中文；说明命令在哪运行、目的和成功条件。用户希望理解第一条关键链路，再让助手承担重复验证、汇总与文档。
+- 分别报告本地修改、测试、提交、推送、远端核验和 GPU 运行；只有可追溯真实结果才能写进论文。保留学习注释、固定数据及已有输出。
 
-区分本地编辑、静态检查、提交、推送、服务器核验和真实 GPU 运行。只引用已核验实验结果；未知项保留待测，不把计划、模拟或缓存回放写成已完成的在线实验。
+## 2. 已完成工作、当前问题与访问状态
 
-## 2. 当前状态：已经有什么，缺什么
-
-| 项目 | 交接时状态 | 接手时如何使用 |
+| 项目 | 当前记录 | 接手处理 |
 | --- | --- | --- |
-| 论文草稿、参考文献、ACL 样式 | 本地存在 | 延续现有文件，避免重新起稿 |
-| 中文实验方案 | 已写成，日期为 2026-10-07 | 是正式实现规格，尚不是运行完成证明 |
-| 草稿审查报告 | 已有 | 优先解决机制证据、强固定策略比较及协议不一致 |
-| 代码语义分析与子采样命题 | 已写入草稿及证明 | 有明确适用条件，不等于准确率或速度保证 |
-| 教学单题工具 | 已有 CLI、配置和本地结果文件 | 只支持教学诊断；不等于正式在线后端 |
-| 历史 10 题 AIME Vanilla pilot | 项目现状文档记录曾核验 | 本次迁移整理未重新读取那份原始运行归档，需携带并复核后引用 |
-| DEER / CoDE 的真实探测链路 | 本次未取得新的 GPU 完成证据 | 不能标为已跑通；先检查已有记录再安排最小运行 |
-| 共同在线后端、自适应策略 | 当前方案中仍为待实现/待验证 | 先完成工程路径，再做研究比较 |
-| 正式准确率、在线速度、主表 | 待测 | `TBD` 不能替换为估计数 |
-| 当前服务器、GPU、余额与网络 | 本次未核验 | 旧主机信息不能当作当前连接或运行证据 |
+| 草稿、实验方案、参考文献、审查报告 | 本地存在，文稿尚未纳入 Git | 单独携带，继续原稿 |
+| 依赖、模型、MATH 数据准备 | 用户报告服务器已完成 | 检查已有清单，优先复用 |
+| 教学 GPU 链路 | `runs/gpu-smoke-001/` 四阶段完成 | 不重复同一验收 |
+| 开发诊断 | `runs/pilot20-diagnostic-8192/` 的 q001、q002 完成，failed=0 | 阶段完成不等于答案正确 |
+| 当前优先问题 | q001 CoDE 补答／提取异常 | 按第 7 节只读解码 |
+| 稀疏调度收益 | 两题 CoDE 均在前三次内停止 | 尚无默认前三次密集之后的稀疏机会 |
+| 正式在线后端、策略、论文主表 | 待实现、待测 | 保留 `TBD` |
+| 当前 GPU 型号、卡数、余额与任务进程 | 本轮未直接取得 | 从实际主机及环境记录核验 |
 
-历史 pilot 的现状说明见 `manuscript/coling2027/README_CN.md`：Qwen3-4B、BF16、RTX 5090，10 道 AIME 题各生成一次；文档记录 8 对、2 错，132,356 个 completion token，累计生成 2,943.931 秒。这些是历史 Vanilla 工程样本，**不得外推为当前 A100 速度、正式模型准确率或新方法收益**。记录缺少逐步 probe 置信度与退化分数，不能替代密集诊断。
+### 已有 GPU 证据摘要
 
-### 本次实际发现的执行阻塞
+- **教学题** `37×43−29×41=402`：base 上限 2048 tokens；Vanilla 补答正确。DEER/CoDE 各一次 probe，confidence=0.78515625、未出现 `</think>`，均未早停并返回 Vanilla。验证了实际探测和回退路径。
+- **q001** `math/train/algebra/566`，标准答案 2008：base 2442 tokens、65.7289 秒；Vanilla/DEER 回答正确。CoDE 第二次 probe confidence=0.9375、ended=true，超过当时 ramp 阈值 0.925，于位置 989 早停。补答用满 30 tokens；按最后一个 `</think>` 提取的片段不完整，完整输出是否已有答案仍待核验。
+- **q002** `math/train/geometry/428`，标准答案 997：base 用满 8192 tokens、215.5112 秒。DEER 五次 probe 均未 ended，未早停。CoDE 第三次退化分数 2.5050895895837346>2，于位置 5331 早停。Vanilla/DEER 输出 2996、CoDE 输出 2992，均错误，不能归为单纯格式问题。
 
-只读审计执行了：
+置信早停和退化早停均有真实执行记录。当前 DEER/CoDE 基于 Vanilla 文本回放，`cp_cache=false`，每次 probe 重复预填充；阶段耗时不含基础生成。停止位置不能直接除以 base token 数计算正式节约率。停止后未执行的 probe 也不是完整密集采集。
 
-```text
-python3 scripts/single_question.py --help
-结果：成功
+另有历史 AIME Vanilla pilot：RTX 5090、Qwen3-4B BF16，10 题各生成一次，8 对 2 错，132,356 completion tokens，累计 2,943.931 秒，见稿件 `README_CN.md`。本轮未重读历史归档；其缺少逐步 probe／退化记录，不能证明当前服务器速度或正式准确率。
 
-python3 scripts/single_question.py plan
-结果：失败
-ValueError: Upstream source differs from pinned version: models.py
-```
+### 执行位置与访问边界
 
-本地上游子模块有学习修改，涉及 `inference.py`、`method_deer.py`、`method_prompts.py`、`models.py`。严格源码校验会把注释变更也识别为哈希不同。**先保留学习修改，再在独立干净副本中做运行核验；不要删除注释，也不要改 `UPSTREAM.json` 的哈希来掩盖差异。** 本次没有修复或覆盖这些文件。
+用户实际部署目录名是 **`codestop-gpu-prep-20261008`**，使用其中 `.venv`；不是后提供的 `gpu-auto` 包。连接信息通过用户已有安全配置提供，不写入可提交的摘要。
+
+本轮已有 SSH 尝试返回 `Permission denied (publickey,password)`：连接已进入认证阶段，助手未登录成功，未取得 GPU 或进程信息。旧详细交接中的 DNS 失败是此前状态，不能概括本轮失败原因。云端需要其自身的服务器访问方式，不在聊天或 Git 中传递密码／私钥。
+
+本地上游有学习修改：`inference.py`、`method_deer.py`、`method_prompts.py`、`models.py`。严格校验曾报 `Upstream source differs from pinned version: models.py`。已部署 prep 包从固定 Git objects 导出干净参考副本；不要清除本地注释、改固定哈希，或为解决本地差异覆盖远端冻结代码。
 
 ## 3. 研究定义与不可混淆的边界
 
@@ -113,10 +110,10 @@ ValueError: Upstream source differs from pinned version: models.py
 
 - Qwen3-4B thinking、BF16、单卡每次一请求；多卡用于独立任务分片。
 - 主生成 temperature=0.6、top_p=0.95、top_k=20、min_p=0；正式最大新生成 token 为 32,768，另检查输入加输出的上下文容量。
-- probe 贪心，保留固定实现最多 21 个生成 token 及原概率语义；统一最终补答最多 30 token。协议变化显式说明。
+- probe 贪心，保留固定实现最多 21 个生成 token 及原概率语义；原方案计划统一最终补答最多 30 token；当前补答异常须在正式冻结前处理，这项规格尚未验收。协议变化显式说明。
 - 主推理与探测 KV 分支隔离，主推理与随机日程使用独立随机流；不能因多做 probe 而改变主推理随机序列。
 - 请求计时覆盖 prefill、主推理、probe、缓存准备/恢复、最终答案及必要控制开销。记录准确率、平均耗时、probe 数、token、显存及失败分类。
-- 计划使用本地 Math-Verify；版本、抽取规则和超时仍待冻结。原版 API 判分属于另一协议，不混表。
+- 计划使用本地 Math-Verify；准备依赖已列入 0.9.0，但正式抽取、比较方向、异常与超时尚未接入验收。原版 API 判分属于另一协议，不混表。
 - 按题进行配对分析和 bootstrap，两个种子属于同题聚类。开发阶段 2pp 筛选条件不等于已证明准确率无损。
 - 离线反事实诊断可复用记录，但不作为在线加速证据。
 
@@ -124,7 +121,7 @@ ValueError: Upstream source differs from pinned version: models.py
 
 ### 用户条件与授权状态
 
-用户曾给出 RTX 5090、预算 500–1,000 元、连续 2–3 天；后来表示 A100/H100、多卡均可考虑，主要希望四天内完成。没有在本次对话中确定已开机的新服务器。
+用户曾给出 RTX 5090、预算 500–1,000 元、连续 2–3 天；后来表示 A100/H100、多卡均可考虑，主要希望四天内完成。已有服务器运行记录，但实际当前 GPU 型号、卡数、租价与余额尚待核验。以下是此前讨论的历史预算情景，本轮未刷新报价。
 
 截图中的候选为 A100 PCIe 40GB，单卡 10 CPU 核、72GB 内存，系统盘 30GB、数据盘 50GB，标价 **¥3.28/卡时**；当时页面只有一张空闲卡。四卡供应与单价不能由这张截图保证。截图镜像为 PyTorch 2.8，不满足当前教学工具的 torch 2.9.1 强校验。所有价格、库存、驱动和磁盘在实际购买前刷新。
 
@@ -150,7 +147,7 @@ ValueError: Upstream source differs from pinned version: models.py
 
 未决定转为 API。2026-10-07 查询 OpenRouter 原 `qwen/qwen3-4b` 的端点列表为空，不代表其他平台全部没有该模型。
 
-DeepInfra Qwen3-14B 公共页为 **FP8、40,960 上下文**，标准价每百万输入 $0.12、输出 $0.24；不是当前 Qwen3-4B BF16 的等价服务。文档有 raw completions 与 logprobs，但具体模型的 thinking 前缀、特殊 token、试答概率语义、版本固定、32K 新生成及缓存行为未做付费实测。
+此前查询的 DeepInfra Qwen3-14B 公共页为 **FP8、40,960 上下文**，标准价每百万输入 $0.12、输出 $0.24；不是当前 Qwen3-4B BF16 的等价服务。文档有 raw completions 与 logprobs，但具体模型的 thinking 前缀、特殊 token、试答概率语义、版本固定、32K 新生成及缓存行为未做付费实测。
 
 对同样 13,060 个完整任务，假设平均主推理 5,000 token、题目/模板 500、每次试答 21、最终补答 30，前缀均长取主推理一半，在线中断和续写都重传前缀、无缓存优惠，以 $1=¥7.2 的预算汇率估算：
 
@@ -171,126 +168,142 @@ API 能做适配后的信号/服务成本研究，但网络、排队、重复 pr
 - <https://docs.deepinfra.com/apis/completions>
 - <https://docs.deepinfra.com/chat/log-probs>
 
-## 6. 文件迁移清单与版本快照
+## 6. 必须携带的文件与版本
 
-### 必须携带
+仅上传本文能恢复背景，不能替代代码、稿件和原始实验记录。
 
-| 文件/目录 | 用途 | 迁移注意事项 |
-| --- | --- | --- |
-| 本文件 `docs/CLOUD_MIGRATION_HANDOFF.md` | 新对话总入口 | 单独上传也能理解现状，但不能替代代码与原始证据 |
-| `manuscript/coling2027/main.tex` | 现有稿件源文件 | 继续原文件；保留 `TBD` |
-| `manuscript/coling2027/EXPERIMENT_PLAN.md` | 完整实验规格 | 优先于旧交接文档中的早期研究范围 |
-| `manuscript/coling2027/references.bib` | 参考文献 | 与主文件一起带走 |
-| `manuscript/coling2027/acl.sty`、`acl_natbib.bst` | 模板依赖 | 多文件 LaTeX 项目需要一同提供 |
-| `manuscript/coling2027/README_CN.md` | 草稿现状、历史证据入口 | 其中旧日期与九配置计数按本文解释 |
-| `ccfa-review-reports/when-to-probe-coling2027-review.md` | 当前问题清单 | 不把评审推测当实验结果 |
-| `AGENTS.md`、`UPSTREAM.json`、`requirements-diagnostic.txt` | 项目约束与依赖 | `UPSTREAM.json` 部分状态是历史字段，不能当实时状态 |
-| `src/`、`scripts/`、`configs/`、`tests/`、相关 `docs/` | 可运行代码与说明 | 按实际仓库文件迁移，不虚构 runner |
-| 已修改上游文件的补丁或学习副本 | 保留阅读注释与可能变更 | 与固定干净执行副本分开保存 |
-| 必需的教学结果及历史 pilot 归档 | 后续复核原始证据 | 审核后通过合适存储传递，不把原始批量输出直接提交 Git |
+| 材料 | 用途／迁移注意事项 |
+| --- | --- |
+| `docs/CLOUD_MIGRATION_HANDOFF.md` | 本文件，云端总入口 |
+| `docs/CONVERSATION_HANDOFF_20261008.md` | 详细执行摘要，尚未跟踪，含机器路径，私下迁移 |
+| `manuscript/coling2027/` | main.tex、EXPERIMENT_PLAN、references.bib、README、ACL 样式；尚未跟踪 |
+| `ccfa-review-reports/when-to-probe-coling2027-review.md` | 稿件问题清单，尚未跟踪 |
+| `AGENTS.md`、`UPSTREAM.json`、`requirements-diagnostic.txt`、`src/`、`configs/`、`scripts/`、`tests/` | 固定参考、工程入口、依赖和测试，完整迁移其相互依赖 |
+| 新增 `run_pilot_diagnostics.py`、`prepare_gpu_data.py`、`setup_gpu_server.sh`、`configure_gpu_remote.sh` | 均位于 scripts/，尚未跟踪；已有环境不自动重跑安装 |
+| `requirements-gpu-prep.txt`、`docs/GPU_PREP_COMMANDS.md` | 准备依赖与说明，尚未跟踪 |
+| `tests/test_pilot_diagnostics.py`、`tests/test_prepare_gpu_data.py` | 新增 CPU 工程检查，尚未跟踪 |
+| 服务器 `data/benchmarks/` 的 JSONL、manifest.json、sources.lock.json | 冻结划分、revision 和校验和，本轮未取回 |
+| 服务器 `runs/gpu-smoke-001/`、`runs/pilot20-diagnostic-8192/` | 原始逐题记录、配置、环境、日志、token IDs，本轮未取回 |
+| 本地上游学习补丁、历史 AIME pilot 归档 | 保留原始证据及注释，与干净执行源码分开 |
 
-`main.pdf` 可作为阅读快照一并携带，但本次未重新编译，不能保证当前编辑器预览正常。`ccfa-workfiles/writing/coling2027/build/` 是已有构建材料，通常无需把所有临时文件迁移。`.vscode/` 按需携带；它不替代环境配置。模型权重、`.venv`、密钥和个人账户配置不放进迁移摘要或 Git。
+**仅 clone GitHub 不会得到未跟踪的文稿、新入口和服务器结果。** 原始输出通过私有存储传递，不直接批量提交 Git。模型权重与 `.venv` 通常留在原 GPU 服务器，更换主机则按固定 revision 重建。密码、密钥、令牌、个人账户配置不进入迁移包。同步 `sources/` 参考材料只读。
 
-### 2026-10-07 创建本文之前的本地 Git 快照
+本轮更新本文前：主分支 main，HEAD `8d71ba76ba4c37479b11787ef47823c4ef4b1b84`。本地跟踪记录显示与 origin/main 一致，远端实时状态需单独核验。已有教学 summary、上游学习文件及其他未跟踪内容均保留。
 
-- 主仓库分支：`main`。
-- 主仓库 HEAD：`791ee6decdc79db5ec8559df55b9174d41028cc6`。
-- 本地 `origin/main` 跟踪记录：`aa120c2`；`git status` 当时显示领先两次提交。该记录不等于实时远端已核验。
-- 未跟踪：`manuscript/`、`ccfa-review-reports/`、`ccfa-workfiles/`、`.vscode/`。
-- 已修改：`results/teaching/2026-09-27/summary.json`，以及上游子模块内四个文件。
-- 上游子模块 HEAD：`b5081e7c2abe23bb1d19649421cc13522fee7c50`，工作区并不干净。
+初始部署包位于 `runs/gpu-prep-delivery/codestop-gpu-prep-20261008.tar.gz`。pilot 脚本随后单独上传，不在初始包内；只恢复该包不够。
 
-**仅 clone GitHub 不能保证获得当前论文和实验方案。** 至少把上表中的未跟踪论文材料单独上传，或在明确的仓库同步流程中审核并提交。本文自身的提交/推送状态以本次交付消息和实际 Git 记录为准；不能由本文创建前的快照推断。
-
-### 关键文件 SHA-256
-
-以下用于迁移完整性核验，不代表实验验证：
+本轮本地 SHA-256（证明文件身份，不代表实验验收）：
 
 ```text
 ae1283d1301a58c371573643849ca7d021e2847c5a46fabc073dd5f97b2e57c1  manuscript/coling2027/main.tex
 20f3e7281e212ef670cc8c3658210d796ddda40e07ae23d9835c5dd013554ec7  manuscript/coling2027/EXPERIMENT_PLAN.md
 1af066dd294d104e9c80a25134cd7b2a0c0f43a0d9c70b2e8e4919c1567b17e9  manuscript/coling2027/references.bib
-db47d30d7f5e98009914b3fde2fa8ebb2026e21b399f92fa4013e5aefcd69682  ccfa-review-reports/when-to-probe-coling2027-review.md
-e1217be7ee7b7e09e4c21945f4411362b5c9ae429f75c787cdfb26ec0bfa7f66  configs/single_question.json
-407c5fa92509c2ea175a9af168966b1c8ee20937a7e1b027df375d4f432418f0  scripts/single_question.py
+3529b14747bd36c127769908b103847e05eca4608544b2d552112735528310a3  scripts/run_pilot_diagnostics.py
+7afcff48850f01dcda8685f9dc345fea438a62140d7795176ac0618aa23d5a6d  scripts/prepare_gpu_data.py
+ef4ff6465802eb808885c9d5720d189b8cfbec7d2dbba40905982a674e190005  src/upstream_diagnostic.py
+3c1e007a52e0e45feb723464764785fe915214d763af00b5cf7968ad449a6181  docs/CONVERSATION_HANDOFF_20261008.md
+2510fd8581dd4d398302c5ccdf0c6e1cf27b0da81164192cb5967e4cc2c49efa  runs/gpu-prep-delivery/codestop-gpu-prep-20261008.tar.gz
 ```
 
-## 7. 云端接手的第一步
+## 7. 云端接手后的准确第一步
 
-### A. 先做只读审计
+### A. 核验已有文件和运行身份
 
-在云端实际取得的 **CoDE 仓库根目录** 执行；不要照抄旧机器绝对路径：
+确认可以访问稿件、代码和 q001/q002 原始记录。真实推理前核验实际主机、GPU、磁盘、运行进程与环境，避免重复启动任务。本轮没有助手直接核验的远端活动进程清单。
+
+现有记录为 Python 3.12、torch 2.9.1+cu128、transformers 4.51.3；准备依赖另固定 accelerate 1.12.0、nltk 3.9.2、huggingface-hub 0.36.0、datasets 3.6.0、math-verify 0.9.0。完整环境以每题 `environment.json` 为准。不要先升级依赖、重跑安装脚本或覆盖 pilot。
+
+数据已冻结：calibration80、另外 selection120、其子集 pilot20、math500、固定 analysis100。复用 JSONL、manifest 和 source lock，不重新抽样。来源是 `EleutherAI/hendrycks_math` train 和 `HuggingFaceH4/MATH-500` test，具体 revision 从远端锁文件读取。
+
+历史下载问题已解决：pip 改用官方 PyPI，权重下载用 `HF_HUB_DISABLE_XET=1` 避开 Xet 401。已有缓存优先复用，不每次接手都重装／重下。
+
+### B. 只读解码 q001，不加载模型、不重新生成
+
+在实际 **gpu-prep 项目根目录**，使用原 `.venv` 执行。该命令只读取记录和本地 tokenizer。在新云端执行需先有记录及相应 tokenizer，不能直接使用旧环境 snapshot 的绝对路径。
 
 ```bash
-pwd
-git status --short --branch
-git rev-parse HEAD
-git submodule status
-git -C upstream/CoDE-Stop status --short
-python3 scripts/single_question.py --help
-python3 scripts/single_question.py plan
+.venv/bin/python - <<'PY'
+import json
+from pathlib import Path
+from transformers import AutoTokenizer
+
+p = Path("runs/pilot20-diagnostic-8192/items/q001")
+env = json.loads((p / "environment.json").read_text(encoding="utf-8"))
+r = json.loads((p / "codestop.json").read_text(encoding="utf-8"))
+tok = AutoTokenizer.from_pretrained(
+    env["model"]["snapshot"], local_files_only=True, trust_remote_code=False,
+)
+call = r["generation_calls"][-1]
+inp = call["input_token_ids"][0]
+out = call["output_token_ids"][0]
+new = call["generated_token_ids"][0]
+response = r["method_output"]["response"]
+print("输出是否保留完整输入前缀:", out[:len(inp)] == inp)
+print("补答输入末尾:", tok.decode(inp[-120:], skip_special_tokens=False))
+print("实际新增的全部 token:", tok.decode(new, skip_special_tokens=False))
+print("保存回答末尾:", response[-1500:])
+print("回答中的结束标记数量:", response.count("</think>"))
+PY
 ```
 
-`plan` 只做配置/源码检查，不加载模型。但若携带了现有上游学习修改，预计仍会遇到前述哈希错误。应先保存这些修改并在独立干净执行副本验证，不在原学习工作区执行破坏性清理。本次并未在新干净副本中验收 `plan`。
+判断新增内容是否再次生成 `</think>`，使 `rsplit` 跳过先前答案；或者补答确实未完成。目前两者均待核验，不能写成已发现并修复的 bug。
 
-如果缺少 `manuscript/coling2027/`，先补齐迁移文件，不按旧 README 重建论文。如果只有本文而没有仓库，先明确可访问的文件与执行工具；不能声称已完成代码迁移。
+- 若只是提取问题，复用已有输出，另存有版本的判分结果，保留原始记录。
+- 若确实补答未完成，另目录做仅改变补答长度的诊断，先评估 30→128 tokens，检查前 30 tokens 能否复现；不要同时改长度和采样。这项补答复用工具尚未实现／运行。
+- 接入、冻结并验证 Math-Verify。教学 grade 不覆盖一般 MATH 表达式；needs_review 不能静默当错，两题也不能支撑正式准确率。
 
-### B. 确认执行环境
+### C. 处理问题后再复用原目录续跑
 
-需要实际推理时，在目标主机检查 `hostname`、`nvidia-smi`、`python3 --version`、磁盘剩余空间，以及 PyTorch/CUDA/BF16。没有 CUDA/GPU 时可继续做代码、文档和 CPU 检查，GPU 部分转交真实 GPU 主机。
+pilot 固定全部 20 题、seed=42、上限8192、顺序与身份；默认 limit=2。**limit 不进入身份，可从 2 扩到 10/20 并复用完成项。** 脚本、配置、数据、源码或环境发生变化则需新目录，不能改校验值蒙混续跑。先比对远端脚本与 manifest，不先上传覆盖。
 
-当前教学依赖目标：torch 2.9.1、transformers 4.51.3、accelerate 1.12.0、nltk 3.9.2。`src/upstream_diagnostic.py` 对前两个版本、CUDA、BF16 有强校验。按目标驱动选择兼容 CUDA wheel，不机械照搬旧 runbook 的安装命令，也不覆盖已有环境。
+解决补答／提取问题并确认沿用原协议后，才使用：
 
-本轮没有创建 SSH 连接配置，也没有在本文保留密码、token 或密钥。云端访问权限需通过其安全配置方式提供。
+```bash
+CUDA_VISIBLE_DEVICES=0 .venv/bin/python scripts/run_pilot_diagnostics.py run --limit 10
+.venv/bin/python scripts/run_pilot_diagnostics.py inspect --limit 10
+```
 
-### C. 区分教学入口和正式后端
+`inspect` 会重写 summary.json，不是严格只读；退出码0也可能有 incomplete，须核对 requested completed/failed/incomplete 与逐题记录。
 
-当前教学入口的阶段为 `base → vanilla → deer / codestop`，有 `plan / prepare / check / run / grade / inspect` 命令。默认教学题为 `37×43−29×41=402`，上限 2,048 token，`cp_cache=false`、`rollback=false`。
+现有入口仍为工程回放，上限8192；不能把 JSON 改为32768就当作正式在线后端。相关 CPU 测试本轮审计通过：pilot 6项、数据准备4项；这是工程证据，不是 GPU 或在线速度验收。
 
-**代码还硬限制最大生成上限不超过 8,192，并要求教学 scope。不能只改 JSON 为 32,768，就把它当成正式研究 runner。** DEER/CoDE 教学路径仍在已生成轨迹上回放，不能产生正式在线速度结论。
+## 8. 后续任务及验收
 
-运行位置、资源与本轮授权明确后，按 `docs/SINGLE_QUESTION_RUNBOOK.md` 分步执行 `prepare`、`check`、单个阶段的 `run`，并使用新的运行目录。`prepare` 会下载模型与资源，`run` 会消耗实际计算；两者不是上面的只读迁移检查。不要直接 `run --stage all` 或启动完整矩阵来代替用户希望理解的首条链路。
-
-## 8. 下一阶段任务与验收
-
-| 顺序 | 任务 | 验收证据 |
+| 顺序 | 工作 | 必须保留的证据 |
 | --- | --- | --- |
-| 1 | 补齐迁移文件，保留学习补丁，建立干净运行副本 | 关键文件哈希、Git 状态、`plan` 结果 |
-| 2 | 审计现有真实记录；补齐尚未验收的单题 DEER/CoDE 路径 | 实际 probe、概率、退化分数、停止位置、最终答案、环境清单 |
-| 3 | 在 `src/`、`scripts/` 实现共同在线后端 | 候选位置一致、KV/RNG 隔离、置信计算与固定参考对齐、完整计时 |
-| 4 | 用预先选定的 10–20 道开发题做正式 32K 配置诊断 | 覆盖短/中/长轨迹、显存、平均及长尾耗时、费用估计 |
-| 5 | 判断机制与预算是否值得扩展 | 候选数、前三次内停止率、剩余 probe 成本、历史缺失是否实际改变决策 |
-| 6 | 完成校准/选参，冻结配置；先跑主测试种子 0，再种子 1 | 完整分母、逐题日志、失败分类、配对统计 |
-| 7 | 根据真实证据修订现有论文 | 主张、表格、配置、引用一致；未完成项不伪填 |
+| 1 | 补齐文件、核验 q001 补答 | 文件身份、完整 token 解码与答案边界 |
+| 2 | 处理输出／判分，按固定顺序扩10–20题 | 第三次后仍继续比例、候选数、probe数、失败类别 |
+| 3 | 实现共同在线后端和对照 | 候选一致、KV/RNG隔离、概率与固定参考对齐、完整计时 |
+| 4 | 正式32K配置小样本验收 | 短中长轨迹、显存、平均及长尾耗时、实测费用 |
+| 5 | 冻结校准、选参和判分 | 强fixed、重校准、rescale、简单退避；测试前冻结 |
+| 6 | 在预算内完成主测试及消融 | 完整分母、逐题日志、配对统计与失败处理 |
+| 7 | 据证据更新现有论文 | 论点、结果表、配置、引用一致，未做部分如实标注 |
 
-先完成调优 fixed、fixed-rescale、fixed-recalibrate 和简单退避，不能因为预算紧就只与弱默认设置比较。是否启用复杂自适应策略由开发证据决定。
+若大多数题前三次就停止，默认调度可节省的探测有限，应重新评估主张，不只挑probe多的题。若强fixed解释了全部收益，收缩自适应优越性主张。
 
-正式运行至少保存：题号/数据版本/划分、种子、模型与 tokenizer revision、runner 提交与配置哈希、硬件软件清单、原始输出、提取答案/判分状态、停止原因、候选/token 位置、每次 probe 的置信度和分数、主推理/probe/最终答案 token、完整耗时和峰值显存。
+正式逐题记录至少包括：数据版本／划分／题号、模型和tokenizer revision、种子、代码和配置哈希、软硬件、原始答案及判分、停止原因、候选/token位置、置信度和退化分数、主推理/probe/补答token、端到端耗时、峰值显存。
 
-出现配置错配、数据重叠、主/探测分支相互污染、无法解释的统计差异、重复 OOM、日志丢失或费用临近上限时，暂停受影响运行定位原因。保留已完成结果，不通过覆盖或删除隐藏失败。
+当前脚本本身没有租金上限。扩量前落实剩余预算、停止时间和监控方式；沿用用户明确给过的授权，不重复询问。配置错配、数据重叠、KV/RNG污染、重复OOM、记录丢失或触及费用上限时停止受影响运行。
 
-## 9. 文档优先级、投稿和遗留问题
+## 9. 文稿和规则的遗留事项
 
-优先级：**用户最新明确决定 → 本文的迁移/预算快照 → 当前实验方案和源码证据 → 旧复现交接及历史预算。** 如正文和实验方案冲突，记录差异并在正式运行前统一，不自行静默选择有利版本。
+- 用户最新决定优先；执行事实以原始记录和当前代码为准。详细GPU回传见 `CONVERSATION_HANDOFF_20261008.md`，旧复现交接中的“从D1开始”“无GPU结果”已过时。
+- `UPSTREAM.json` clean/experiments_started 等字段是历史状态，不能代替现场检查。
+- main.tex 对 fixed 重校准范围的文字，与方案仅在选定间隔 `h*` 上重校准不同。本预算按后者；正式运行前统一规格。
+- 当前诊断最终补答沿用上游采样，正式方案计划统一贪心，这是协议差异，需记录和验收。
+- 文稿尚未吸收最新两题诊断；本轮未编辑或编译 main.tex，旧PDF与源码是否一致待写作时核验。
+- COLING 2027 截止、ARR周期、页数和审稿服务规则在实际提交前查官方最新来源。此前日期是旧规划，本文件不确认当前官方规则。合作者／审稿服务人选尚未确认本次参与。
+- 费用脚本 `estimate_paper_budget.py` / `estimate_api_budget.py` 仅做情景计算，不是运行入口。旧三方法共享轨迹预算不能代替13,060请求矩阵预算。
+- 遵守用户最新要求及项目AGENTS.md，保留其他未提交工作，自有实现放src/scripts。
 
-已知待统一：`main.tex` 对 fixed 重校准范围的表述，与实验方案中仅在选定间隔 `h*` 上重校准的执行规格有差异。当前预算遵循后者；最终应让文稿和执行协议一致。
+## 10. 可直接交给云端新对话的指令
 
-`docs/REPRODUCTION_HANDOFF.md` 为 2026-09-21 早期快照，其中“从 D1 开始”“没有真实输出”等已不能概括当前状态。不要让云端接手后重新从零规划。`UPSTREAM.json` 中的 `upstream_worktree_clean`、`gpu_experiments_started` 同样是历史元数据，不是实时检查结果。
-
-旧预算只涵盖三方法共享基础轨迹，不能拿来承诺当前约 13,060 次在线研究矩阵的费用。现有 `estimate_paper_budget.py` / `estimate_api_budget.py` 是费用情景计算器，不是实验运行入口，也没有替当前矩阵完成实测。
-
-目标仍是 COLING 2027，但 **官方截止时间、ARR 周期、页数与审稿服务规则在提交前重新核验**。既有文档中 10 月 9 日继续/缩小判断、10 月 12 日内部冻结是当时的内部日程，不是本文核验过的官方截止日期。用户曾说有合作者/审稿服务人选，但还未沟通本次投稿，不能标为已落实。
-
-本次仅生成迁移摘要，没有修改或编译 `main.tex`。旧 PDF 是否与源文件一致、当前编辑器编译是否正常均需在实际写作任务中检查。
-
-遵守仓库 `AGENTS.md`；项目 `sources/` 同步材料只读。上游保持参考身份，自有实现放 `src/` / `scripts/`。原始数据、权重、凭据和未审核运行输出不提交 Git。代码/文档同步与付费实验授权分开处理。
-
-## 10. 可直接复制给新对话的接手指令
-
-> 请依据这份 CLOUD_MIGRATION_HANDOFF.md 接手我的 CoDE-Stop / When to Probe 论文项目，目标 COLING 2027。我已经决定继续探测调度与早停方向，暂不转 TokenSkip，也没有决定改用 API 替代主实验。
+> 请依据这份 CLOUD_MIGRATION_HANDOFF.md 接手我的 CoDE-Stop / When to Probe 项目，目标COLING 2027。继续探测调度与早停方向，不转TokenSkip，不默认用API替代主实验。
 >
-> 先核验你能访问的仓库、论文、实验方案和原始记录，报告哪些材料缺失。重点检查未跟踪的 manuscript 文件是否已经带过来，以及上游学习修改导致的源码哈希校验失败。保留原有修改，在干净运行副本中核验；不要把教学入口直接改成正式 32K runner。
+> 先清点你能访问的稿件、代码和服务器原始记录。仅clone得不到未跟踪的论文、新pilot脚本和远端结果。延续原稿和固定数据，不从零规划。
 >
-> 然后给出并推进不依赖付费 GPU 的代码审计和准备工作。真实推理前确认目标主机、GPU、环境、本轮费用和时间授权，沿用我已经明确给出的授权。先补齐最小真实单题链路，再实现和验证共同在线后端，之后做 10–20 道开发题诊断与预算实测。不要未经确认直接启动完整 13,060 请求矩阵。
+> 已完成教学题和两题开发诊断。先按第7节只读解码q001的CoDE补答，区分提取问题和实际截断；保留原始记录及冻结身份，不重复下载模型、重跑教学题或直接开完整矩阵。处理后再考虑续跑固定前10题。
 >
-> 用中文解释第一条关键链路。只有真实、可追溯的结果才能进入论文。分别报告本地修改、测试、提交、推送和 GPU 验证状态；缺少的证据标为待验证。继续编辑现有论文源文件，不重新选题或重建一篇替代稿。
+> 随后推进共同在线后端、KV/RNG隔离、正式判分和32K小样本验收，用实测耗时更新预算。沿用已明确的执行授权；云端缺少服务器访问时先推进不依赖GPU的工作，并指出准确缺项，不宣称已接管服务器。
+>
+> 用中文说明第一条关键链路，只将可追溯真实结果写入论文，分别报告修改、测试、提交、推送和GPU验证。继续现有main.tex，不另起替代稿。
