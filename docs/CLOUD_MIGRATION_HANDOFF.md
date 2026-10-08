@@ -1,12 +1,20 @@
 # 云端迁移交接：CoDE-Stop / When to Probe
 
-更新：2026-10-08，北京时间。用途：供新对话或云端工作区接手研究。路径均相对于 CoDE 仓库根目录，执行命令前先确认当前位置。
+更新：2026-10-08，北京时间。用途：供新对话或云端工作区接手研究。路径均相对于 CoDE 仓库根目录，执行命令前先确认当前位置。本文是当前迁移总入口；旧交接中的执行状态按其记录时间理解，不覆盖本文的更新。
 
-**当前接续点：用户已完成一题教学 GPU 诊断和两题开发诊断。先核验 q001 的补答／答案提取，再决定是否扩到 10 题。调度纯逻辑与独立数学判分已新增并完成 CPU 检查；真实在线 GPU 后端和论文主实验仍待完成。**
+**当前接续点：用户已完成一题教学 GPU 诊断和两题开发诊断。先核验 q001 的补答／答案提取，再决定是否扩到 10 题。调度纯逻辑、独立数学判分及共同在线组件已完成各自的本地检查；生产运行入口、真实 GPU 联调验收和论文主实验仍待完成。**
 
 本文合并了 `docs/CONVERSATION_HANDOFF_20261008.md` 的执行记录，取代本文件原 2026-10-07 状态快照。GPU 数字来自详细交接保存的用户回传日志；本轮没有取得远端完整原始文件，不能称为助手已直接复核。详细交接可作为补充携带，本文可独立恢复任务背景。
 
-迁移文档完成后，用户明确要求继续实验；本轮随后新增独立诊断、判分和调度协议组件，未创建新云端任务、搬迁服务器或启动新 GPU 实验。云端工作区不自动拥有 GPU、模型缓存、服务器访问权或本地文件。
+用户已明确要求继续实验，本地随后新增独立诊断、判分、调度协议及在线推理组件。本文件只交接当前状态；未创建新云端任务、搬迁服务器或启动新 GPU 实验。云端工作区不自动拥有 GPU、模型缓存、服务器访问权或本地文件。
+
+## 0. 迁移时先做这三件事
+
+1. **把本文交给新对话。** 第 10 节有可直接复制的接手指令；研究目标、预算口径和当前问题均已保留。
+2. **补齐工作文件。** 克隆仓库只能恢复已提交内容。按第 6 节另外携带未跟踪稿件、脚本及尚未提交的代码；接收后逐项检查文件和版本，不能把“已上传本文”当作“已迁移项目”。
+3. **单独确认 GPU 访问和原始记录。** 先复用原服务器的模型与冻结数据。本文不携带认证信息；连接恢复后先查已有任务和 q001 记录，再启动新的推理。
+
+建议阅读顺序：本节 → 第 2 节的真实进度 → 第 6 节文件清单 → 第 7 节第一步。第 3–5 节是研究方案和预算背景，可按需回查。所有完成状态以保存的文件、测试结果或真实运行证据为准。
 
 ## 1. 已确定的方向与协作方式
 
@@ -29,7 +37,8 @@
 | 当前优先问题 | q001 CoDE 补答／提取异常 | 按第 7 节只读解码 |
 | 稀疏调度收益 | 两题 CoDE 均在前三次内停止 | 尚无默认前三次密集之后的稀疏机会 |
 | 保存结果诊断、数学判分、调度纯逻辑 | 本轮新增，CPU 检查通过 | 待实际原始记录及 GPU 集成验收 |
-| 正式在线 GPU 后端、论文主表 | 待实现、待测 | 保留 `TBD` |
+| 共同在线推理组件 | 已保存并提交，本地状态机与 tiny Qwen3 检查通过 | 不当作 GPU 验收通过 |
+| 正式运行入口、论文主表 | 入口尚缺、GPU 验收及主实验待做 | 保留 `TBD` |
 | 当前 GPU 型号、卡数、余额与任务进程 | 本轮未直接取得 | 从实际主机及环境记录核验 |
 
 ### 已有 GPU 证据摘要
@@ -46,7 +55,7 @@
 
 用户实际部署目录名是 **`codestop-gpu-prep-20261008`**，使用其中 `.venv`；不是后提供的 `gpu-auto` 包。连接信息通过用户已有安全配置提供，不写入可提交的摘要。
 
-本轮已有 SSH 尝试返回 `Permission denied (publickey,password)`：连接已进入认证阶段，助手未登录成功，未取得 GPU 或进程信息。旧详细交接中的 DNS 失败是此前状态，不能概括本轮失败原因。云端需要其自身的服务器访问方式，不在聊天或 Git 中传递密码／私钥。
+用户在本次整理期间重新开机，并提供了新的 SSH 主机和端口；私有详细交接 `docs/CONVERSATION_HANDOFF_20261008.md` 第 2 节已更新为新连接命令，不再使用旧目标。对新地址的只读检查已到达 SSH 认证阶段，返回 `Permission denied (publickey,password)`；助手仍未登录成功，未取得重启后的 GPU、进程或文件状态。本地也没有可复用的已连接控制通道。旧 DNS 失败只是历史状态。云端需要其自身的服务器访问方式，不在聊天或 Git 中传递密码／私钥；本机控制 socket 不能当作云端凭证携带。缺少连接时仍可接续独立的本地工作。
 
 本地上游有学习修改：`inference.py`、`method_deer.py`、`method_prompts.py`、`models.py`。严格校验曾报 `Upstream source differs from pinned version: models.py`。已部署 prep 包从固定 Git objects 导出干净参考副本；不要清除本地注释、改固定哈希，或为解决本地差异覆盖远端冻结代码。
 
@@ -114,7 +123,7 @@
 - probe 贪心，保留固定实现最多 21 个生成 token 及原概率语义；原方案计划统一最终补答最多 30 token；当前补答异常须在正式冻结前处理，这项规格尚未验收。协议变化显式说明。
 - 主推理与探测 KV 分支隔离，主推理与随机日程使用独立随机流；不能因多做 probe 而改变主推理随机序列。
 - 请求计时覆盖 prefill、主推理、probe、缓存准备/恢复、最终答案及必要控制开销。记录准确率、平均耗时、probe 数、token、显存及失败分类。
-- 计划使用本地 Math-Verify；准备依赖已列入 0.9.0，但正式抽取、比较方向、异常与超时尚未接入验收。原版 API 判分属于另一协议，不混表。
+- 本地 Math-Verify 0.9.0 独立判分已通过抽取、比较方向、异常与硬超时测试；尚未接入真实 q001/q002 答案区间及正式在线结果。原版 API 判分属于另一协议，不混表。
 - 按题进行配对分析和 bootstrap，两个种子属于同题聚类。开发阶段 2pp 筛选条件不等于已证明准确率无损。
 - 离线反事实诊断可复用记录，但不作为在线加速证据。
 
@@ -180,6 +189,8 @@ API 能做适配后的信号/服务成本研究，但网络、排队、重复 pr
 | `manuscript/coling2027/` | main.tex、EXPERIMENT_PLAN、references.bib、README、ACL 样式；尚未跟踪 |
 | `ccfa-review-reports/when-to-probe-coling2027-review.md` | 稿件问题清单，尚未跟踪 |
 | `AGENTS.md`、`UPSTREAM.json`、`requirements-diagnostic.txt`、`src/`、`configs/`、`scripts/`、`tests/` | 固定参考、工程入口、依赖和测试，完整迁移其相互依赖 |
+| `src/online_contract.py`、`src/online_engine.py`、`tests/test_online_engine.py` | 已保存的新共同在线接口与状态机；与 `online_protocol.py` 的最新修改一起携带，不能只取接口文件或只取旧提交 |
+| `src/torch_online_backend.py`、`tests/test_torch_online_backend.py` | 已保存的 Torch 后端与 CPU 小模型测试；尚未真实 CUDA/BF16 验收，不在旧基线提交中 |
 | 新增 `run_pilot_diagnostics.py`、`prepare_gpu_data.py`、`setup_gpu_server.sh`、`configure_gpu_remote.sh` | 均位于 scripts/，尚未跟踪；已有环境不自动重跑安装 |
 | `requirements-gpu-prep.txt`、`docs/GPU_PREP_COMMANDS.md` | 准备依赖与说明，尚未跟踪 |
 | `tests/test_pilot_diagnostics.py`、`tests/test_prepare_gpu_data.py` | 新增 CPU 工程检查，尚未跟踪 |
@@ -189,7 +200,18 @@ API 能做适配后的信号/服务成本研究，但网络、排队、重复 pr
 
 **仅 clone GitHub 不会得到未跟踪的文稿、新入口和服务器结果。** 原始输出通过私有存储传递，不直接批量提交 Git。模型权重与 `.venv` 通常留在原 GPU 服务器，更换主机则按固定 revision 重建。密码、密钥、令牌、个人账户配置不进入迁移包。同步 `sources/` 参考材料只读。
 
-本轮更新本文前：主分支 main，HEAD `8d71ba76ba4c37479b11787ef47823c4ef4b1b84`。本地跟踪记录显示与 origin/main 一致，远端实时状态需单独核验。已有教学 summary、上游学习文件及其他未跟踪内容均保留。
+迁移副本按以下四层检查；本文件没有代为打包或上传这些材料：
+
+1. **已提交代码层**：确认实际 Git commit，并取得固定上游 Git object。协议测试会从 `upstream/CoDE-Stop` 读取固定提交的函数，只有当前源码而没有该 Git object 也不够。
+2. **本地增量层**：保留需要的 tracked diff，以及表中明确列出的未跟踪稿件、脚本、配置、测试与在线组件。上游学习注释单独保留，执行用干净固定源码。不要整目录复制 `.vscode/`、全部缓存或机器配置。为实际携带的每个文件生成 SHA-256 清单；下面的几个 hash 只是关键身份，不是完整迁移包清单。
+3. **服务器证据层**：携带 `data/benchmarks/` 的 JSONL、manifest/source lock；pilot 顶层 manifest、configs；q001/q002 全部 stage JSON、environment、console/events/launch 记录；以及服务器实际入口脚本的 hash。另保留精确 tokenizer revision 或其本地文件，便于不加载模型直接解码。当前只有回传摘要，原始文件尚待取回。
+4. **新环境层**：按原记录重建解释器和依赖；不要把 Mac 的虚拟环境复制到 Linux。模型和数据已有缓存则校验后复用。旧 environment 内的绝对 snapshot 路径在新主机上可能失效，应显式提供实际 tokenizer 目录。
+
+开始本次迁移更新时：主分支 main，HEAD `0ba16d843edb12ddb90aad230f940ce452ce5d8e`（`feat: add saved-answer audit grading and probe protocol checks`）；本次 `git ls-remote` 也核验远端 main 指向该提交。它包含保存答案检查器、判分组件及最初的纯逻辑调度协议。`6e5803f` 是此前交接文档提交。不能再沿用详细交接里的 `8d71ba7` 作为最新代码状态。
+
+在线组件及禁用早停的密集采集扩展已另存为提交 **`3d520c6da2d8e926a33a247e004a9e54837b8ee0`**（`feat: add locally validated online inference components`），包含 contract、engine、Torch backend、protocol 修改及两份新增测试。接手时确认该提交确实已取到；推送与抓取成功须分别核验。本文的更新另用文档提交保存，不属于旧基线 `0ba16d8`。
+
+已有教学 summary、上游学习文件及其他未跟踪内容均保留，禁止用清理或重置命令覆盖。**新代码入库不等于未跟踪稿件或服务器输出已迁移。**
 
 初始部署包位于 `runs/gpu-prep-delivery/codestop-gpu-prep-20261008.tar.gz`。pilot 脚本随后单独上传，不在初始包内；只恢复该包不够。
 
@@ -202,8 +224,14 @@ ae1283d1301a58c371573643849ca7d021e2847c5a46fabc073dd5f97b2e57c1  manuscript/col
 3529b14747bd36c127769908b103847e05eca4608544b2d552112735528310a3  scripts/run_pilot_diagnostics.py
 7afcff48850f01dcda8685f9dc345fea438a62140d7795176ac0618aa23d5a6d  scripts/prepare_gpu_data.py
 ef4ff6465802eb808885c9d5720d189b8cfbec7d2dbba40905982a674e190005  src/upstream_diagnostic.py
-3c1e007a52e0e45feb723464764785fe915214d763af00b5cf7968ad449a6181  docs/CONVERSATION_HANDOFF_20261008.md
+db2c1c7ed99b32f3ddfd0e8c64b455117efbd97612546975dd035af76d949adc  docs/CONVERSATION_HANDOFF_20261008.md
 2510fd8581dd4d398302c5ccdf0c6e1cf27b0da81164192cb5967e4cc2c49efa  runs/gpu-prep-delivery/codestop-gpu-prep-20261008.tar.gz
+c87156b2dfdb3ce12d069e676b6963329fefc734ca81a3f77b6d23a2b6ad3b11  src/online_contract.py
+785fb930aa50847dde0d3b2237e4b14c1fdba4df8e078aeec3b63597dad11830  src/online_engine.py
+ca5ada5c48d6d0d712ce2a4f3042e6dd6ed47dd9d961105e8dce915346978355  src/online_protocol.py
+6aa6b639802afa98267c24d735e60e85a8f737cd2f63debdf040b60024e161e6  src/torch_online_backend.py
+b6bc991f2c382f1962a8581c013f0de6ef598768aec8682375e84929712926cc  tests/test_online_engine.py
+4ea5e2f33e51f5d8d1b8b30bd0b3bbf3681ed8a37fe4db0b3aecd2045e0919c9  tests/test_torch_online_backend.py
 ```
 
 ## 7. 云端接手后的准确第一步
@@ -215,10 +243,29 @@ ef4ff6465802eb808885c9d5720d189b8cfbec7d2dbba40905982a674e190005  src/upstream_d
 | `scripts/inspect_saved_finalization.py` | 8 项 CPU 测试；本地 tokenizer 解码、token 前后缀一致性、全部 thinking 边界 | 真实 q001/q002 解码尚未取得 |
 | `src/math_grading.py`、`scripts/grade_math_answers.py` | 22 项 CPU/实际 Math-Verify 集成测试；硬超时、抽取、完整分母、独立报告 | 实际答案区间输入及正式数据判分 |
 | `src/online_protocol.py` | 25 项 CPU 测试；固定上游 D/ramp 对照、六种日程、随机流、无效观测及成本 EMA | 模型生成循环、KV 分叉、BF16 对齐和 GPU 计时 |
+| `src/online_contract.py`、`src/online_engine.py` | 新增 16 项 CPU 状态机测试；包含停止／继续、答案边界、token 计数、预算与异常 | 与真实 Torch 后端联调、真实 GPU 验收 |
+| `src/torch_online_backend.py` | 13 项固定版本 tiny Qwen3 CPU 测试；真实 DynamicCache 分支、私有 RNG、固定上游函数对照与采样顺序 | Qwen3-4B CUDA/BF16 数值、显存、完整引擎联调及真实耗时 |
 
 配套测试为 `tests/test_inspect_saved_finalization.py`、`test_math_grading.py`、`test_online_protocol.py`；判分契约见 `docs/MATH_GRADING_PROTOCOL.md`。这些新增文件应一同迁移。旧 core/adapter/pilot/数据准备脚本均未修改，不改变原 pilot 的身份。
 
-完整测试在新增三项协议回归前为 87 项全过；最后仅调整协议组件，对其重跑 25 项通过。均为工程检查，测试中的临时仓库推送日志不代表真实项目已同步。此前迁移摘要提交为 `6e5803f`，真实 GitHub 推送因连接失败未完成；后续提交与推送状态看实际 Git 记录。
+最近针对当前在线接口及状态机，执行 `python3 -m unittest discover -s tests -p 'test_online_*.py' -v`，41 项通过（协议 25＋状态机 16），覆盖本次 disabled-stopping 扩展。它不运行真实 Torch 后端测试。更早的完整测试在新增三项协议回归前为 87 项全过，不把两次范围不同的检查拼成一个虚构的全套通过数。测试中的临时仓库推送日志不代表真实项目已同步；实际远端引用已另核验。
+
+另用本地 `runs/online-validation/venv/bin/python`、torch 2.9.1 和 transformers 4.51.3 重跑 `test_torch_online_backend.py`，13 项通过；没有下载 Qwen3-4B 权重。这是在 Mac CPU 上的小模型检查。该虚拟环境被忽略，不随 Git 迁移；新环境须按指定版本重建，真实 GPU 用原服务器环境另验。
+
+### 共同在线组件的接续工作
+
+`src/online_contract.py` 定义统一模型版本、标记和后端接口；`src/online_engine.py` 已实现生成、探测、提前退出及最终答案区间。`src/torch_online_backend.py` 已保存真实模型、KV 分支和采样实现，生产构造要求本地固定 revision、CUDA/BF16 及指定版本，不自行下载模型；CPU 测试使用显式标注 synthetic 的 tiny 随机模型。组件尚未完成真实 GPU 联调。新组件与旧回放 core 分开，不能覆盖被冻结的 pilot 实现。
+
+需要保留的实现约定：
+
+- 主生成先采样，再决定是否接纳 token 到 KV。遇到 `Wait` 时，以不含该 pending token 的前缀 probe；继续时接纳同一个 token，不重采样。
+- probe 使用独立 KV 副本，不能改变主 KV、logits 和主随机流；随机日程另有自己的随机流。
+- 自然 EOS 直接结束；思考阶段早停或耗尽预算时才注入共享 final prefix。答案阶段耗尽预算只续写，不重复关闭思考。
+- 最终答案按保存的 token 边界提取，保留注入的 `\boxed` 前缀；不能按全文最后一个 `</think>` 重新切分。
+- `dense_collect_no_stop` 密集记录停止谓词但继续生成。控制器仅允许 dense 日程关闭停止；`would_stop` 与实际 `should_stop` 分开记录。这属于采集成本，不是主表早停速度。
+- CPU 合成小模型测试只验证接口与工程性质；原模型 BF16 数值、实际 CUDA KV 行为和墙钟必须在 GPU 上验收。
+
+**`scripts/run_online_diagnostic.py` 尚不存在。** 云端接手应先检查组件及测试现状，再实现有界入口：冻结数据身份和代码哈希、按题与 rollout 派生独立种子、单卡单请求、显式 token／题数上限、新结果目录和锁、逐题原子保存、失败部分记录、原始输出与完整计时。不能提供不存在的“一键主实验”命令。首次只用一题和明确短预算作工程烟测，后续另验 32K 配置。
 
 fixed/log/random 在有效但未结束的 probe 后保持预设日程；只有 adaptive/backoff 使用 incomplete 回退。所有家族共享 invalid/有效历史不足三条的密集回退。自然提前停止仍可发生在第三次之前。
 
@@ -229,6 +276,8 @@ fixed/log/random 在有效但未结束的 probe 后保持预设日程；只有 a
 现有记录为 Python 3.12、torch 2.9.1+cu128、transformers 4.51.3；准备依赖另固定 accelerate 1.12.0、nltk 3.9.2、huggingface-hub 0.36.0、datasets 3.6.0、math-verify 0.9.0。完整环境以每题 `environment.json` 为准。不要先升级依赖、重跑安装脚本或覆盖 pilot。
 
 数据已冻结：calibration80、另外 selection120、其子集 pilot20、math500、固定 analysis100。复用 JSONL、manifest 和 source lock，不重新抽样。来源是 `EleutherAI/hendrycks_math` train 和 `HuggingFaceH4/MATH-500` test，具体 revision 从远端锁文件读取。
+
+独立判分环境还须满足 `antlr4-python3-runtime==4.13.2`、`latex2sympy2_extended==1.11.0`、`sympy==1.14.0`、`mpmath==1.3.0`；版本不符时判分 CLI 会拒绝运行。完整输入、抽取、超时与分母协议见 `docs/MATH_GRADING_PROTOCOL.md`。测试被跳过不算集成验收通过。
 
 历史下载问题已解决：pip 改用官方 PyPI，权重下载用 `HF_HUB_DISABLE_XET=1` 避开 Xet 401。已有缓存优先复用，不每次接手都重装／重下。
 
@@ -276,6 +325,8 @@ PY
 - 若确实补答未完成，另目录做仅改变补答长度的诊断，先评估 30→128 tokens，检查前 30 tokens 能否复现；不要同时改长度和采样。这项补答复用工具尚未实现／运行。
 - 接入、冻结并验证 Math-Verify。教学 grade 不覆盖一般 MATH 表达式；needs_review 不能静默当错，两题也不能支撑正式准确率。
 
+答案边界核实后，另存逐请求 `final_answers.jsonl`（唯一 `id`、干净 `gold`、隔离的 `answer_text`、来源 hash 与边界说明），在装有冻结判分依赖的环境运行 `scripts/grade_math_answers.py`。须显式给出计划请求数，输出为新文件；不得回写旧 pilot 的 grading 或依靠 gold 修补输出。
+
 ### C. 处理问题后再复用原目录续跑
 
 pilot 固定全部 20 题、seed=42、上限8192、顺序与身份；默认 limit=2。**limit 不进入身份，可从 2 扩到 10/20 并复用完成项。** 脚本、配置、数据、源码或环境发生变化则需新目录，不能改校验值蒙混续跑。先比对远端脚本与 manifest，不先上传覆盖。
@@ -303,6 +354,17 @@ CUDA_VISIBLE_DEVICES=0 .venv/bin/python scripts/run_pilot_diagnostics.py run --l
 | 6 | 在预算内完成主测试及消融 | 完整分母、逐题日志、配对统计与失败处理 |
 | 7 | 据证据更新现有论文 | 论点、结果表、配置、引用一致，未做部分如实标注 |
 
+共同在线组件首次 GPU 验收分成四个有界任务，均写入新目录：
+
+| 验收 | 首轮范围 | 通过条件 |
+| --- | --- | --- |
+| probe 数值 | 最多 3 个已保存前缀，每个最多 21 个 probe token | 同前缀和固定上游逐 token、原始 BF16 概率、置信度、ended 标记对齐；预先约定容差 |
+| KV／RNG 隔离 | 同一前缀，无 probe／插入 1 次／插入 2 次，各最多续写 64 tokens | 主 KV、logits、随机流不被探测改变，主续写逐 token 一致 |
+| 答案区间接线 | 思考中补答、答案中预算耗尽、自然 EOS 三种路径 | 注入前缀与生成区间可追溯，不使用最后 think 标记重新切分，不额外救回 EOS |
+| 在线计时与容量 | 1 题、Vanilla/dense/fixed，先限定 1024 主 tokens；32K 容量另验 | 全程在线、预热单列、计时与token分项齐全；目标最长 KV 下另查 context 和峰值显存 |
+
+这些检查通过仅表示可以进入 10–20 题正式配置测速；不能据此声称方法加速或准确率保持。短预算 smoke 也不等于 32K 容量通过。失败时保存第一次差异，不静默换精度、预算或实现来拼表。
+
 若大多数题前三次就停止，默认调度可节省的探测有限，应重新评估主张，不只挑probe多的题。若强fixed解释了全部收益，收缩自适应优越性主张。
 
 正式逐题记录至少包括：数据版本／划分／题号、模型和tokenizer revision、种子、代码和配置哈希、软硬件、原始答案及判分、停止原因、候选/token位置、置信度和退化分数、主推理/probe/补答token、端到端耗时、峰值显存。
@@ -328,6 +390,6 @@ CUDA_VISIBLE_DEVICES=0 .venv/bin/python scripts/run_pilot_diagnostics.py run --l
 >
 > 已完成教学题和两题开发诊断。先按第7节只读解码q001的CoDE补答，区分提取问题和实际截断；保留原始记录及冻结身份，不重复下载模型、重跑教学题或直接开完整矩阵。处理后再考虑续跑固定前10题。
 >
-> 随后推进共同在线后端、KV/RNG隔离、正式判分和32K小样本验收，用实测耗时更新预算。沿用已明确的执行授权；云端缺少服务器访问时先推进不依赖GPU的工作，并指出准确缺项，不宣称已接管服务器。
+> 随后从已保存的online_contract、online_engine和online_protocol接续，检查torch_online_backend的实际开发状态，补齐有界运行入口；不要把组件或CPU测试当作GPU验收。完成KV/RNG隔离、正式判分和32K小样本验收，用实测耗时更新预算。沿用已明确的执行授权；云端缺少服务器访问时先推进不依赖GPU的工作，并指出准确缺项，不宣称已接管服务器。
 >
 > 用中文说明第一条关键链路，只将可追溯真实结果写入论文，分别报告修改、测试、提交、推送和GPU验证。继续现有main.tex，不另起替代稿。
