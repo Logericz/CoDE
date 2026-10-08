@@ -2,9 +2,9 @@
 
 更新：2026-10-08，北京时间。用途：供新对话或云端工作区接手研究。路径均相对于 CoDE 仓库根目录，执行命令前先确认当前位置。本文是当前迁移总入口；旧交接中的执行状态按其记录时间理解，不覆盖本文的更新。
 
-**当前接续点：用户已完成一题教学 GPU 诊断和两题开发诊断。先核验 q001 的补答／答案提取，再决定是否扩到 10 题。调度纯逻辑、独立数学判分及共同在线组件已完成各自的本地检查；生产运行入口、真实 GPU 联调验收和论文主实验仍待完成。**
+**当前接续点：用户已完成一题教学 GPU 诊断和两题开发诊断。q001 已确认完整正确 boxed 值被旧提取方式遗漏；下一步接入明确答案边界与有界在线入口，再做单题 GPU 验收。调度纯逻辑、独立数学判分及共同在线组件已完成各自的本地检查；生产运行入口、真实 GPU 联调验收和论文主实验仍待完成。**
 
-本文合并了 `docs/CONVERSATION_HANDOFF_20261008.md` 的执行记录，取代本文件原 2026-10-07 状态快照。GPU 数字来自详细交接保存的用户回传日志；本轮没有取得远端完整原始文件，不能称为助手已直接复核。详细交接可作为补充携带，本文可独立恢复任务背景。
+本文合并了 `docs/CONVERSATION_HANDOFF_20261008.md` 的执行记录，取代本文件原 2026-10-07 状态快照。最近已成功登录服务器，取回 q001/q002 等 33 个文件并逐项核对 SHA-256，又用原服务器 tokenizer 独立解码 CoDE 补答。教学题等未取回部分仍以用户回传日志为依据。详细交接可作为补充携带，本文可独立恢复任务背景。
 
 用户已明确要求继续实验，本地随后新增独立诊断、判分、调度协议及在线推理组件。本文件只交接当前状态；未创建新云端任务、搬迁服务器或启动新 GPU 实验。云端工作区不自动拥有 GPU、模型缓存、服务器访问权或本地文件。
 
@@ -12,7 +12,7 @@
 
 1. **把本文交给新对话。** 第 10 节有可直接复制的接手指令；研究目标、预算口径和当前问题均已保留。
 2. **补齐工作文件。** 克隆仓库只能恢复已提交内容。按第 6 节另外携带未跟踪稿件、脚本及尚未提交的代码；接收后逐项检查文件和版本，不能把“已上传本文”当作“已迁移项目”。
-3. **单独确认 GPU 访问和原始记录。** 先复用原服务器的模型与冻结数据。本文不携带认证信息；连接恢复后先查已有任务和 q001 记录，再启动新的推理。
+3. **单独确认 GPU 访问和原始记录。** 先复用原服务器的模型与冻结数据。本文不携带认证信息；当前本机已能连接并完成只读检查；新云端仍须独立确认访问方式和已有任务，再启动新的推理。
 
 建议阅读顺序：本节 → 第 2 节的真实进度 → 第 6 节文件清单 → 第 7 节第一步。第 3–5 节是研究方案和预算背景，可按需回查。所有完成状态以保存的文件、测试结果或真实运行证据为准。
 
@@ -34,17 +34,17 @@
 | 依赖、模型、MATH 数据准备 | 用户报告服务器已完成 | 检查已有清单，优先复用 |
 | 教学 GPU 链路 | `runs/gpu-smoke-001/` 四阶段完成 | 不重复同一验收 |
 | 开发诊断 | `runs/pilot20-diagnostic-8192/` 的 q001、q002 完成，failed=0 | 阶段完成不等于答案正确 |
-| 当前优先问题 | q001 CoDE 补答／提取异常 | 按第 7 节只读解码 |
+| 当前优先问题 | q001 原因已查明，完整区间仍含重复 think 标记 | 冻结一致的边界处理，补齐有界在线入口 |
 | 稀疏调度收益 | 两题 CoDE 均在前三次内停止 | 尚无默认前三次密集之后的稀疏机会 |
 | 保存结果诊断、数学判分、调度纯逻辑 | 本轮新增，CPU 检查通过 | 待实际原始记录及 GPU 集成验收 |
 | 共同在线推理组件 | 已保存并提交，本地状态机与 tiny Qwen3 检查通过 | 不当作 GPU 验收通过 |
 | 正式运行入口、论文主表 | 入口尚缺、GPU 验收及主实验待做 | 保留 `TBD` |
-| 当前 GPU 型号、卡数、余额与任务进程 | 本轮未直接取得 | 从实际主机及环境记录核验 |
+| 当前 GPU | 单卡 RTX 4090，24564 MiB；检查时无 GPU 计算进程 | 租价和余额未核验；32K 容量及真实速度待测 |
 
 ### 已有 GPU 证据摘要
 
 - **教学题** `37×43−29×41=402`：base 上限 2048 tokens；Vanilla 补答正确。DEER/CoDE 各一次 probe，confidence=0.78515625、未出现 `</think>`，均未早停并返回 Vanilla。验证了实际探测和回退路径。
-- **q001** `math/train/algebra/566`，标准答案 2008：base 2442 tokens、65.7289 秒；Vanilla/DEER 回答正确。CoDE 第二次 probe confidence=0.9375、ended=true，超过当时 ramp 阈值 0.925，于位置 989 早停。补答用满 30 tokens；按最后一个 `</think>` 提取的片段不完整，完整输出是否已有答案仍待核验。
+- **q001** `math/train/algebra/566`，标准答案 2008：base 2442 tokens、65.7289 秒；Vanilla/DEER 回答正确。CoDE 第二次 probe confidence=0.9375、ended=true，超过当时 ramp 阈值 0.925，于位置 989 早停。补答用满 30 tokens；独立解码确认先生成完整 `\boxed{2008}`，之后又生成 `</think>` 并开始解释。旧 `rsplit` 遗漏了此前答案；严格判分仍因重复标记记为 needs_review，原记录保留。
 - **q002** `math/train/geometry/428`，标准答案 997：base 用满 8192 tokens、215.5112 秒。DEER 五次 probe 均未 ended，未早停。CoDE 第三次退化分数 2.5050895895837346>2，于位置 5331 早停。Vanilla/DEER 输出 2996、CoDE 输出 2992，均错误，不能归为单纯格式问题。
 
 置信早停和退化早停均有真实执行记录。当前 DEER/CoDE 基于 Vanilla 文本回放，`cp_cache=false`，每次 probe 重复预填充；阶段耗时不含基础生成。停止位置不能直接除以 base token 数计算正式节约率。停止后未执行的 probe 也不是完整密集采集。
@@ -55,7 +55,7 @@
 
 用户实际部署目录名是 **`codestop-gpu-prep-20261008`**，使用其中 `.venv`；不是后提供的 `gpu-auto` 包。连接信息通过用户已有安全配置提供，不写入可提交的摘要。
 
-用户在本次整理期间重新开机，并提供了新的 SSH 主机和端口；私有详细交接 `docs/CONVERSATION_HANDOFF_20261008.md` 第 2 节已更新为新连接命令，不再使用旧目标。对新地址的只读检查已到达 SSH 认证阶段，返回 `Permission denied (publickey,password)`；助手仍未登录成功，未取得重启后的 GPU、进程或文件状态。本地也没有可复用的已连接控制通道。旧 DNS 失败只是历史状态。云端需要其自身的服务器访问方式，不在聊天或 Git 中传递密码／私钥；本机控制 socket 不能当作云端凭证携带。缺少连接时仍可接续独立的本地工作。
+用户重启后已建立有效 SSH 控制连接，助手成功复用并登录新主机；私有详细交接第 2 节保存当前连接命令。已直接核验 RTX 4090、依赖、原项目和保存记录。此前认证失败是历史状态。新云端需要其自身的服务器访问方式，本机控制 socket 不能当作云端凭证携带。
 
 本地上游有学习修改：`inference.py`、`method_deer.py`、`method_prompts.py`、`models.py`。严格校验曾报 `Upstream source differs from pinned version: models.py`。已部署 prep 包从固定 Git objects 导出干净参考副本；不要清除本地注释、改固定哈希，或为解决本地差异覆盖远端冻结代码。
 
@@ -123,7 +123,7 @@
 - probe 贪心，保留固定实现最多 21 个生成 token 及原概率语义；原方案计划统一最终补答最多 30 token；当前补答异常须在正式冻结前处理，这项规格尚未验收。协议变化显式说明。
 - 主推理与探测 KV 分支隔离，主推理与随机日程使用独立随机流；不能因多做 probe 而改变主推理随机序列。
 - 请求计时覆盖 prefill、主推理、probe、缓存准备/恢复、最终答案及必要控制开销。记录准确率、平均耗时、probe 数、token、显存及失败分类。
-- 本地 Math-Verify 0.9.0 独立判分已通过抽取、比较方向、异常与硬超时测试；尚未接入真实 q001/q002 答案区间及正式在线结果。原版 API 判分属于另一协议，不混表。
+- 本地 Math-Verify 0.9.0 独立判分已通过抽取、比较方向、异常与硬超时测试；已对 q001/q002 CoDE 保存的受控答案区间运行：q001 为边界 needs_review，q002 为 incorrect；正式在线结果接入仍待做。原版 API 判分属于另一协议，不混表。
 - 按题进行配对分析和 bootstrap，两个种子属于同题聚类。开发阶段 2pp 筛选条件不等于已证明准确率无损。
 - 离线反事实诊断可复用记录，但不作为在线加速证据。
 
@@ -131,7 +131,7 @@
 
 ### 用户条件与授权状态
 
-用户曾给出 RTX 5090、预算 500–1,000 元、连续 2–3 天；后来表示 A100/H100、多卡均可考虑，主要希望四天内完成。已有服务器运行记录，但实际当前 GPU 型号、卡数、租价与余额尚待核验。以下是此前讨论的历史预算情景，本轮未刷新报价。
+用户曾给出 RTX 5090、预算 500–1,000 元、连续 2–3 天；后来表示 A100/H100、多卡均可考虑，主要希望四天内完成。当前已现场确认单卡 RTX 4090 24GB；租价与余额尚未核验，不能把下面 A100 价格套到这台机器。以下是此前讨论的历史预算情景，本轮未刷新报价。
 
 截图中的候选为 A100 PCIe 40GB，单卡 10 CPU 核、72GB 内存，系统盘 30GB、数据盘 50GB，标价 **¥3.28/卡时**；当时页面只有一张空闲卡。四卡供应与单价不能由这张截图保证。截图镜像为 PyTorch 2.8，不满足当前教学工具的 torch 2.9.1 强校验。所有价格、库存、驱动和磁盘在实际购买前刷新。
 
@@ -194,8 +194,8 @@ API 能做适配后的信号/服务成本研究，但网络、排队、重复 pr
 | 新增 `run_pilot_diagnostics.py`、`prepare_gpu_data.py`、`setup_gpu_server.sh`、`configure_gpu_remote.sh` | 均位于 scripts/，尚未跟踪；已有环境不自动重跑安装 |
 | `requirements-gpu-prep.txt`、`docs/GPU_PREP_COMMANDS.md` | 准备依赖与说明，尚未跟踪 |
 | `tests/test_pilot_diagnostics.py`、`tests/test_prepare_gpu_data.py` | 新增 CPU 工程检查，尚未跟踪 |
-| 服务器 `data/benchmarks/` 的 JSONL、manifest.json、sources.lock.json | 冻结划分、revision 和校验和，本轮未取回 |
-| 服务器 `runs/gpu-smoke-001/`、`runs/pilot20-diagnostic-8192/` | 原始逐题记录、配置、环境、日志、token IDs，本轮未取回 |
+| 服务器 `data/benchmarks/` 的 JSONL、manifest.json、sources.lock.json | 已取回 manifest、source lock 和 pilot20；其余 JSONL 仍在原服务器 |
+| 服务器 `runs/gpu-smoke-001/`、`runs/pilot20-diagnostic-8192/` | 已取回 pilot 顶层及 q001/q002 配置、完整 stage 和日志；教学题原始文件尚未取回 |
 | 本地上游学习补丁、历史 AIME pilot 归档 | 保留原始证据及注释，与干净执行源码分开 |
 
 **仅 clone GitHub 不会得到未跟踪的文稿、新入口和服务器结果。** 原始输出通过私有存储传递，不直接批量提交 Git。模型权重与 `.venv` 通常留在原 GPU 服务器，更换主机则按固定 revision 重建。密码、密钥、令牌、个人账户配置不进入迁移包。同步 `sources/` 参考材料只读。
@@ -204,7 +204,7 @@ API 能做适配后的信号/服务成本研究，但网络、排队、重复 pr
 
 1. **已提交代码层**：确认实际 Git commit，并取得固定上游 Git object。协议测试会从 `upstream/CoDE-Stop` 读取固定提交的函数，只有当前源码而没有该 Git object 也不够。
 2. **本地增量层**：保留需要的 tracked diff，以及表中明确列出的未跟踪稿件、脚本、配置、测试与在线组件。上游学习注释单独保留，执行用干净固定源码。不要整目录复制 `.vscode/`、全部缓存或机器配置。为实际携带的每个文件生成 SHA-256 清单；下面的几个 hash 只是关键身份，不是完整迁移包清单。
-3. **服务器证据层**：携带 `data/benchmarks/` 的 JSONL、manifest/source lock；pilot 顶层 manifest、configs；q001/q002 全部 stage JSON、environment、console/events/launch 记录；以及服务器实际入口脚本的 hash。另保留精确 tokenizer revision 或其本地文件，便于不加载模型直接解码。当前只有回传摘要，原始文件尚待取回。
+3. **服务器证据层**：携带 `data/benchmarks/` 的 JSONL、manifest/source lock；pilot 顶层 manifest、configs；q001/q002 全部 stage JSON、environment、console/events/launch 记录；以及服务器实际入口脚本的 hash。另保留精确 tokenizer revision 或其本地文件，便于不加载模型直接解码。已取回部分位于 `runs/remote-evidence-20261008/`，共 33 文件及 hash 清单；两份独立解码、新判分报告和当前环境清单也在该目录，均被 Git 忽略，须私下携带。
 4. **新环境层**：按原记录重建解释器和依赖；不要把 Mac 的虚拟环境复制到 Linux。模型和数据已有缓存则校验后复用。旧 environment 内的绝对 snapshot 路径在新主机上可能失效，应显式提供实际 tokenizer 目录。
 
 开始本次迁移更新时：主分支 main，HEAD `0ba16d843edb12ddb90aad230f940ce452ce5d8e`（`feat: add saved-answer audit grading and probe protocol checks`）；本次 `git ls-remote` 也核验远端 main 指向该提交。它包含保存答案检查器、判分组件及最初的纯逻辑调度协议。`6e5803f` 是此前交接文档提交。不能再沿用详细交接里的 `8d71ba7` 作为最新代码状态。
@@ -224,7 +224,7 @@ ae1283d1301a58c371573643849ca7d021e2847c5a46fabc073dd5f97b2e57c1  manuscript/col
 3529b14747bd36c127769908b103847e05eca4608544b2d552112735528310a3  scripts/run_pilot_diagnostics.py
 7afcff48850f01dcda8685f9dc345fea438a62140d7795176ac0618aa23d5a6d  scripts/prepare_gpu_data.py
 ef4ff6465802eb808885c9d5720d189b8cfbec7d2dbba40905982a674e190005  src/upstream_diagnostic.py
-db2c1c7ed99b32f3ddfd0e8c64b455117efbd97612546975dd035af76d949adc  docs/CONVERSATION_HANDOFF_20261008.md
+fbaf0f5ee39dc5420f8744c8fb6a1175b2cc2eb1758b8dd8dc2fa12bb3b610de  docs/CONVERSATION_HANDOFF_20261008.md
 2510fd8581dd4d398302c5ccdf0c6e1cf27b0da81164192cb5967e4cc2c49efa  runs/gpu-prep-delivery/codestop-gpu-prep-20261008.tar.gz
 c87156b2dfdb3ce12d069e676b6963329fefc734ca81a3f77b6d23a2b6ad3b11  src/online_contract.py
 785fb930aa50847dde0d3b2237e4b14c1fdba4df8e078aeec3b63597dad11830  src/online_engine.py
@@ -240,7 +240,7 @@ b6bc991f2c382f1962a8581c013f0de6ef598768aec8682375e84929712926cc  tests/test_onl
 
 | 文件 | 已验收范围 | 未完成范围 |
 | --- | --- | --- |
-| `scripts/inspect_saved_finalization.py` | 8 项 CPU 测试；本地 tokenizer 解码、token 前后缀一致性、全部 thinking 边界 | 真实 q001/q002 解码尚未取得 |
+| `scripts/inspect_saved_finalization.py` | 8 项 CPU 测试；真实 q001/q002 CoDE 的原 tokenizer 解码及 token 一致性已通过 | 其他实际输出按需核查 |
 | `src/math_grading.py`、`scripts/grade_math_answers.py` | 22 项 CPU/实际 Math-Verify 集成测试；硬超时、抽取、完整分母、独立报告 | 实际答案区间输入及正式数据判分 |
 | `src/online_protocol.py` | 25 项 CPU 测试；固定上游 D/ramp 对照、六种日程、随机流、无效观测及成本 EMA | 模型生成循环、KV 分叉、BF16 对齐和 GPU 计时 |
 | `src/online_contract.py`、`src/online_engine.py` | 新增 16 项 CPU 状态机测试；包含停止／继续、答案边界、token 计数、预算与异常 | 与真实 Torch 后端联调、真实 GPU 验收 |
@@ -271,7 +271,7 @@ fixed/log/random 在有效但未结束的 probe 后保持预设日程；只有 a
 
 ### A. 核验已有文件和运行身份
 
-确认可以访问稿件、代码和 q001/q002 原始记录。真实推理前核验实际主机、GPU、磁盘、运行进程与环境，避免重复启动任务。本轮没有助手直接核验的远端活动进程清单。
+确认可以访问稿件、代码和 q001/q002 原始记录。真实推理前核验实际主机、GPU、磁盘、运行进程与环境，避免重复启动任务。最近 nvidia-smi 返回 GPU 计算进程列表为空；这仅代表检查时状态，启动前仍须复查。
 
 现有记录为 Python 3.12、torch 2.9.1+cu128、transformers 4.51.3；准备依赖另固定 accelerate 1.12.0、nltk 3.9.2、huggingface-hub 0.36.0、datasets 3.6.0、math-verify 0.9.0。完整环境以每题 `environment.json` 为准。不要先升级依赖、重跑安装脚本或覆盖 pilot。
 
@@ -281,7 +281,7 @@ fixed/log/random 在有效但未结束的 probe 后保持预设日程；只有 a
 
 历史下载问题已解决：pip 改用官方 PyPI，权重下载用 `HF_HUB_DISABLE_XET=1` 避开 Xet 401。已有缓存优先复用，不每次接手都重装／重下。
 
-### B. 只读解码 q001，不加载模型、不重新生成
+### B. q001 只读解码已完成，保留复核方式
 
 新增独立工具可输出包含源文件哈希的完整 JSON，先将该工具上传到原项目而不覆盖任何已冻结脚本，再在原项目根目录执行：
 
@@ -319,10 +319,10 @@ print("回答中的结束标记数量:", response.count("</think>"))
 PY
 ```
 
-判断新增内容是否再次生成 `</think>`，使 `rsplit` 跳过先前答案；或者补答确实未完成。目前两者均待核验，不能写成已发现并修复的 bug。
+已确认新增内容先完成 `{2008}`，随后再次生成 `</think>`，旧 `rsplit` 确实跳过此前答案。q001 的答案不缺失，无需延长补答寻找正确值。核查报告见 `results/pilot20-finalization-audit.md`；这不表示旧提取代码已经修改或正式判分已经接受此异常输出。
 
-- 若只是提取问题，复用已有输出，另存有版本的判分结果，保留原始记录。
-- 若确实补答未完成，另目录做仅改变补答长度的诊断，先评估 30→128 tokens，检查前 30 tokens 能否复现；不要同时改长度和采样。这项补答复用工具尚未实现／运行。
+- 已复用已有输出另存严格判分：q001 needs_review，q002 incorrect；原 grading 未改动。正确 boxed 值的边界审查结论单列。
+- 当前无需对 q001 做 30→128 token 重生成。先明确如何对全部方法一致处理重复 think 标记，并在主测试前冻结；不得只为这个样本改规则。
 - 接入、冻结并验证 Math-Verify。教学 grade 不覆盖一般 MATH 表达式；needs_review 不能静默当错，两题也不能支撑正式准确率。
 
 答案边界核实后，另存逐请求 `final_answers.jsonl`（唯一 `id`、干净 `gold`、隔离的 `answer_text`、来源 hash 与边界说明），在装有冻结判分依赖的环境运行 `scripts/grade_math_answers.py`。须显式给出计划请求数，输出为新文件；不得回写旧 pilot 的 grading 或依靠 gold 修补输出。
@@ -346,7 +346,7 @@ CUDA_VISIBLE_DEVICES=0 .venv/bin/python scripts/run_pilot_diagnostics.py run --l
 
 | 顺序 | 工作 | 必须保留的证据 |
 | --- | --- | --- |
-| 1 | 补齐文件、核验 q001 补答 | 文件身份、完整 token 解码与答案边界 |
+| 1 | q001 原因核查已完成；携带证据并明确异常边界处理 | 原始 hash、token 解码、单列审查结论与严格判分 |
 | 2 | 处理输出／判分，按固定顺序扩10–20题 | 第三次后仍继续比例、候选数、probe数、失败类别 |
 | 3 | 将已测纯协议接入共同在线 GPU 后端和对照 | 候选一致、KV/RNG隔离、概率与固定参考对齐、完整计时 |
 | 4 | 正式32K配置小样本验收 | 短中长轨迹、显存、平均及长尾耗时、实测费用 |
@@ -388,7 +388,7 @@ CUDA_VISIBLE_DEVICES=0 .venv/bin/python scripts/run_pilot_diagnostics.py run --l
 >
 > 先清点你能访问的稿件、代码和服务器原始记录。仅clone得不到未跟踪的论文、新pilot脚本和远端结果。延续原稿和固定数据，不从零规划。
 >
-> 已完成教学题和两题开发诊断。先按第7节只读解码q001的CoDE补答，区分提取问题和实际截断；保留原始记录及冻结身份，不重复下载模型、重跑教学题或直接开完整矩阵。处理后再考虑续跑固定前10题。
+> 已完成教学题和两题开发诊断。q001已独立解码，确认原输出存在正确boxed=2008，旧最后think切片遗漏了它；q002的2992对标准997仍错。先读results/pilot20-finalization-audit.md，保留旧记录与新判分的边界区别，补齐有界在线入口并做单题GPU验收。不重复下载模型、重跑教学题或直接开完整矩阵。
 >
 > 随后从已保存的online_contract、online_engine和online_protocol接续，检查torch_online_backend的实际开发状态，补齐有界运行入口；不要把组件或CPU测试当作GPU验收。完成KV/RNG隔离、正式判分和32K小样本验收，用实测耗时更新预算。沿用已明确的执行授权；云端缺少服务器访问时先推进不依赖GPU的工作，并指出准确缺项，不宣称已接管服务器。
 >
