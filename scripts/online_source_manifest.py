@@ -13,6 +13,7 @@ METHOD_SOURCE_FILES = (
     "src/online_methods/dense.py",
     "src/online_methods/fixed.py",
     "src/online_methods/adaptive.py",
+    "src/online_methods/guarded.py",
     "src/online_methods/logarithmic.py",
     "src/online_methods/random_schedule.py",
     "src/online_methods/backoff.py",

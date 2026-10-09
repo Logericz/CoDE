@@ -275,3 +275,21 @@ python3 scripts/analyze_stop_opportunities.py \
 A/C与旧线上实际停止点或自然EOS吻合。无crossing保持null，不能把自然终点补成
 阈值crossing；单独分支在OR停止后出现的crossing属于反事实诊断。D只在共同T比较，
 不能累加D差推断耗时。无warm-up的时钟诊断仍待另做，本节不等于E2全部完成。
+
+## Guarded候选（2026-10-09）
+
+[设计说明](GUARDED_SCHEDULER.md)给出实际新调度规则，[首次筛查](../results/guarded-candidate-20261009.md)
+报告十题完整结果。单题入口已支持`--configurations codestop-dense codestop-guarded`
+和`--margin-m0 0.05`；只增加可选配置，默认配置和旧十题批处理清单不变。
+当前源码尚未完成新GPU验收，运行前仍按本手册核对主机、环境及对应源码门槛。
+
+Mac仓库根目录可直接复用已有缓存重现，必须使用新目录：
+
+```bash
+python3 scripts/replay_guarded_candidate.py \
+  --output-dir runs/guarded-candidate-20261009/replay-002
+```
+
+回放区分59个历史输入与当前设计/源码身份，输出逐题日志；跳过点不更新历史，
+不造末端probe。主生成加probe是部分token成本；没有新端点补答时质量未知，
+没有稀疏线上时延估计。Guarded首次筛查仅省一次probe，不据此启动四卡扩量。

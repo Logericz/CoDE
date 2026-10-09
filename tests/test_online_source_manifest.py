@@ -20,9 +20,9 @@ import validate_online_gpu as gpu
 
 
 class OnlineSourceManifestTests(unittest.TestCase):
-    def test_explicit_nine_module_inventory_covers_the_deployed_package(self):
+    def test_explicit_module_inventory_covers_the_deployed_package(self):
         names = ("__init__", "common", "vanilla", "dense", "fixed", "adaptive",
-                 "logarithmic", "random_schedule", "backoff")
+                 "guarded", "logarithmic", "random_schedule", "backoff")
         self.assertEqual(METHOD_SOURCE_FILES, tuple(f"src/online_methods/{name}.py" for name in names))
         self.assertEqual(METHOD_IDENTITY_FILES, ("scripts/online_source_manifest.py", *METHOD_SOURCE_FILES))
         actual = {str(path.relative_to(ROOT)) for path in (ROOT / "src/online_methods").glob("*.py")}

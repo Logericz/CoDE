@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
 spec = importlib.util.spec_from_file_location("run_online_diagnostic", ROOT / "scripts/run_online_diagnostic.py")
 runner = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(runner)
@@ -246,6 +247,12 @@ class RunnerTests(unittest.TestCase):
                 self.assertIsNone(result["seed_schedule"])
             if config["label"] in ("codestop-log", "codestop-backoff", "codestop-adaptive"):
                 self.assertEqual(result["schedule_config"]["h_max"], 4)
+            if config["label"] == "codestop-guarded":
+                self.assertEqual(result["schedule_config"]["kind"], "guarded")
+                self.assertEqual(result["schedule_config"]["margin_m0"], 0.1)
+                self.assertTrue(all(p["decision"]["h_next"] in (None, 1, 2) for p in result["probes"]))
+                self.assertTrue(all(p["decision"]["h_cost"] is None for p in result["probes"]))
+                self.assertTrue(any(p["decision"]["h_next"] == 2 for p in result["probes"]))
         events = [json.loads(line) for line in (args.run_root / "events.jsonl").read_text().splitlines()]
         decisions = [event for event in events if event["event"] == "probe_decision"]
         self.assertTrue(decisions)

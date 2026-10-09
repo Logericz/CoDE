@@ -39,7 +39,7 @@ DATA_SOURCES = {"EleutherAI/hendrycks_math", "HuggingFaceH4/MATH-500"}
 DEFAULT_CONFIGS = ("vanilla", "codestop-dense", "codestop-fixed")
 SUPPORTED_CONFIGS = DEFAULT_CONFIGS + (
     "deer-dense", "codestop-log", "codestop-random", "codestop-backoff",
-    "codestop-adaptive", "dense-collect-no-stop")
+    "codestop-adaptive", "codestop-guarded", "dense-collect-no-stop")
 CODE_FILES = ("scripts/run_online_diagnostic.py", "src/online_contract.py",
               "src/online_engine.py", "src/online_protocol.py", "src/torch_online_backend.py",
               "src/math_grading.py", "scripts/grade_math_answers.py", *METHOD_IDENTITY_FILES)
@@ -180,6 +180,7 @@ def configurations(labels, fixed_interval, *, h_max=ScheduleConfig().h_max,
                    "log": {"log_a": log_a, "h_max": h_max},
                    "random": {"random_p": random_p},  # The declared random cap stays eight.
                    "backoff": {"margin_m0": margin_m0, "h_max": h_max},
+                   "guarded": {"margin_m0": margin_m0},  # Fixed 1/2 cap, no cost min.
                    "adaptive": {"beta": beta, "h_max": h_max}}.get(kind, {})
         result.append({"label": label, "method": method,
                        "schedule_config": ScheduleConfig(kind=kind, **options),
@@ -494,7 +495,8 @@ def parser():
     result.add_argument("--beta", type=float, default=schedule.beta, help="adaptive cost target: 0.25, 0.5, or 1")
     result.add_argument("--log-a", type=float, default=schedule.log_a, help="log schedule coefficient: 0.5, 1, or 2")
     result.add_argument("--random-p", type=float, default=schedule.random_p, help="capped geometric probability from declared grid")
-    result.add_argument("--margin-m0", type=float, default=schedule.margin_m0, help="backoff margin: 0.02, 0.05, or 0.10")
+    result.add_argument("--margin-m0", type=float, default=schedule.margin_m0,
+                        help="backoff/guarded margin: 0.02, 0.05, or 0.10; guarded first pilot uses 0.05")
     result.add_argument("--r-max", type=float, default=protocol.r_max, help="CoDE maximum confidence threshold")
     result.add_argument("--tau", type=float, default=protocol.tau, help="CoDE positive degeneration threshold")
     result.add_argument("--deer-threshold", type=float, default=protocol.deer_threshold, help="DEER confidence threshold")

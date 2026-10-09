@@ -57,7 +57,7 @@ class SharedEngineMethodTests(unittest.TestCase):
     def test_method_modules_can_be_imported_before_protocol_or_engine(self):
         # A fresh interpreter is necessary: the imports above would otherwise
         # hide cycles between online_protocol and its new scheduler modules.
-        for module in ("vanilla", "dense", "fixed", "adaptive"):
+        for module in ("vanilla", "dense", "fixed", "adaptive", "guarded"):
             with self.subTest(module=module):
                 code = (f"import sys; sys.path.insert(0, {str(ROOT / 'src')!r}); "
                         f"import online_methods.{module}; import online_engine")
@@ -115,6 +115,24 @@ class SharedEngineMethodTests(unittest.TestCase):
             outputs.append(result["output_token_ids"])
         self.assertEqual(outputs[0], outputs[1])
         self.assertEqual(outputs[0], outputs[2])
+
+    def test_guarded_skips_valid_incomplete_probes_without_changing_main_tokens(self):
+        main = [7] + [token for _ in range(9) for token in (WAIT, 7)] + [END, VALUE, EOS]
+        for kind, queries in (("adaptive", list(range(1, 10))), ("guarded", [1, 2, 3, 5, 7, 9])):
+            with self.subTest(kind=kind):
+                clock = Clock()
+                backend = CostlyProbeBackend(main, clock)
+                backend.probes = [observation(0.5, False)] * 12
+                with patch("online_engine.time.perf_counter", clock):
+                    result = run_request(backend, question="Synthetic question", sample_id=kind,
+                        rollout_id=0, seed_reason=42, max_new_tokens=len(main), method="codestop",
+                        schedule_config=ScheduleConfig(kind=kind))
+                self.assertEqual([p["candidate_j"] for p in result["probes"]], queries)
+                self.assertEqual(result["output_token_ids"], main)
+                self.assertEqual(result["n_candidates"], 9)
+                self.assertEqual(result["stop_reason"], "natural_eos")
+                self.assertEqual(result["probes"][-1]["decision"]["valid_history_count"], len(queries))
+                self.assertEqual(backend.probe_states, [[1, 2] + main[:2*j-1] for j in queries])
 
 
 class SchedulerRecoveryTests(unittest.TestCase):

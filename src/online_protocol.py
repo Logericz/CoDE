@@ -76,9 +76,12 @@ class ProtocolConfig:
 
 @dataclass(frozen=True)
 class ScheduleConfig:
-    """The predeclared schedule families and grids in the experiment plan."""
+    """Original schedule grids plus the separately labelled guarded candidate.
 
-    kind: Literal["dense", "fixed", "log", "random", "backoff", "adaptive"] = "dense"
+    guarded 使用 margin_m0 和固定的 1/2 候选间隔；h_max/beta 不参与它的决策。
+    """
+
+    kind: Literal["dense", "fixed", "log", "random", "backoff", "adaptive", "guarded"] = "dense"
     fixed_interval: int = 4
     h_max: int = 8
     log_a: float = 1.0
@@ -87,7 +90,7 @@ class ScheduleConfig:
     beta: float = 0.5
 
     def __post_init__(self) -> None:
-        if self.kind not in ("dense", "fixed", "log", "random", "backoff", "adaptive"):
+        if self.kind not in ("dense", "fixed", "log", "random", "backoff", "adaptive", "guarded"):
             raise ProtocolError("unknown schedule kind")
         if type(self.fixed_interval) is not int or not 1 <= self.fixed_interval <= 9:
             raise ProtocolError("fixed_interval must be in the frozen 1..9 grid")
@@ -326,6 +329,8 @@ class ProtocolController:
     probes force dense recovery only for adaptive/backoff; fixed/log/random keep
     their preset cadence after warm-up (section 7.2). Signal decline/near-boundary
     and cost rules apply only to their specified families.
+    The post hoc guarded candidate permits valid incomplete probes to select a
+    one-candidate skip when its separate margin/change-rate guards pass.
 Natural termination may prevent a scheduled query; do not manufacture a terminal
 probe. Calls after a stopping decision or at an unscheduled candidate are errors.
 """

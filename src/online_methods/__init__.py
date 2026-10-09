@@ -5,7 +5,7 @@
 
 from collections.abc import Callable
 
-from . import adaptive, backoff, dense, fixed, logarithmic, random_schedule
+from . import adaptive, backoff, dense, fixed, guarded, logarithmic, random_schedule
 from .common import ScheduleContext, ScheduleResult
 
 
@@ -15,6 +15,7 @@ def scheduler_for(kind: str) -> Callable[[ScheduleContext], ScheduleResult]:
         "dense": dense.choose_next,
         "fixed": fixed.choose_next,
         "adaptive": adaptive.choose_next,
+        "guarded": guarded.choose_next,
         "log": logarithmic.choose_next,
         "random": random_schedule.choose_next,
         "backoff": backoff.choose_next,
