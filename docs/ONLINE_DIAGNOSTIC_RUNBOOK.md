@@ -228,3 +228,50 @@ python scripts/analyze_dense_collection.py \
 ```
 
 分析逐题核对Vanilla完整主采样流、原dense公共probe、首次would-stop、停止后新增观测、自然终点/预算覆盖、token守恒和计时。自适应回放只读取模拟已查询点，跨跳点累加原始分段主推理时间；密集采集中的时间不能当作稀疏在线耗时，停止后的未来观测不提供给已经停止的策略。本阶段完成后先判断可稀疏机会与成本限制，再决定是否推进30题开发筛查；不自动启动80/120选参、MATH500或AIME。
+
+## 十题本地答案复核与机制分解（2026-10-09）
+
+已完成结果见 [质量与机制报告](../results/development10-quality-mechanism-20261009.md)。
+以下命令在 **Mac 的 CoDE 仓库根目录**运行，不需要 SSH、CUDA 或模型加载。
+原结果位于被 Git 忽略的 runs，单独 clone 不包含它们。原40条包仍为人工裁决
+pending；新的助手辅助结果单独保存，不能修改旧包来标记人工完成。
+
+1. 先读 [冻结边界准则](ANSWER_BOUNDARY_REVIEW_V1.md)。两份独立上下文助手裁决
+   已存于下列 `QUALITY_ROOT`，勿在查看 gold 后修改。`seal` 只读匿名案例，必须先
+   成功；`prepare` 才验证并读取私有映射。下面的 replay-001 用于另存重现，若已存在
+   必须选择新目录，禁止覆盖。
+
+```bash
+QUALITY_ROOT=runs/development10-analysis-20261009/quality
+QUALITY_OUT="$QUALITY_ROOT/replay-001"
+python3 scripts/analyze_answer_review.py seal \
+  --packet runs/development10-20261008/answer-review-pending-001 \
+  --policy docs/ANSWER_BOUNDARY_REVIEW_V1.md \
+  --review-a "$QUALITY_ROOT/reviewer_a.jsonl" \
+  --review-b "$QUALITY_ROOT/reviewer_b.jsonl" \
+  --output "$QUALITY_OUT/sealed"
+python3 scripts/analyze_answer_review.py prepare \
+  --packet runs/development10-20261008/answer-review-pending-001 \
+  --sealed "$QUALITY_OUT/sealed" --output "$QUALITY_OUT/prepared"
+runs/grading-validation/venv/bin/python scripts/grade_math_answers.py \
+  --input "$QUALITY_OUT/prepared/grading-input.jsonl" \
+  --planned-count 40 --timeout-seconds 10 \
+  --output "$QUALITY_OUT/supplementary-math-grades.json"
+```
+
+2. 固定 Q=(1,2,3,7,11,...) 比较 A（全机会/全历史）、B（仅Q/全历史 oracle）、
+   C（仅Q/稀疏历史）。新分析器单独核对历史434项审计及a08/a09原始记录hash；
+   不修改旧分析器或使用当前源码冒充旧GPU身份。保存的analysis-001不可覆盖。
+
+```bash
+python3 scripts/analyze_stop_opportunities.py \
+  --collection-run runs/dense10-20261008/remote-a09-final/runs/dense10-001 \
+  --development-run runs/development10-20261008/remote-a08-final/runs/development10-001 \
+  --prior-analysis runs/dense10-20261008/analysis-001/analysis.json \
+  --output-dir runs/development10-analysis-20261009/mechanism/analysis-002
+```
+
+成功条件：40条补充分母完整并保留未决；机制结果status=passed、failed_checks为空，
+A/C与旧线上实际停止点或自然EOS吻合。无crossing保持null，不能把自然终点补成
+阈值crossing；单独分支在OR停止后出现的crossing属于反事实诊断。D只在共同T比较，
+不能累加D差推断耗时。无warm-up的时钟诊断仍待另做，本节不等于E2全部完成。
