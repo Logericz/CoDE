@@ -21,10 +21,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from online_engine import json_safe
 from online_protocol import CostObservation, ProbeObservation, ProtocolConfig, ProtocolController, ScheduleConfig
+from online_source_manifest import METHOD_IDENTITY_FILES
 
 LABEL = "dense-collect-no-stop"
 METHOD = "dense_collect_no_stop"
 PHASES = ("prefill", "reason", "probe_cache", "answer")
+CORE_SOURCE_FILES = ("src/online_engine.py", "src/online_protocol.py", "src/online_contract.py",
+                     "src/torch_online_backend.py", *METHOD_IDENTITY_FILES)
+REPLAY_SOURCE_FILES = ("src/online_protocol.py", *METHOD_IDENTITY_FILES)
 
 
 def encoded(value):
@@ -345,12 +349,12 @@ def analyze(collection_root, development_root):
                     evidence["paired_sources"][dev][label]["sha256"] == previous["records"][(dev, label)][0]["source_sha256"])
         code = cm["code_sha256"]
         audit.check("same_engine_backend_protocol", all(code.get(k) == pm["code_sha256"].get(k)
-                    and code.get(k) is not None for k in ("src/online_engine.py", "src/online_protocol.py",
-                                                        "src/online_contract.py", "src/torch_online_backend.py")))
-        local_protocol = audit.bind(ROOT / "src/online_protocol.py")
-        audit.check("replay_protocol_source_identity", code.get("src/online_protocol.py") == local_protocol)
-        if code.get("src/online_protocol.py") != local_protocol:
-            raise ValueError("Local replay protocol is not the collection's frozen protocol")
+                    and code.get(k) is not None for k in CORE_SOURCE_FILES))
+        for filename in REPLAY_SOURCE_FILES:
+            local_hash = audit.bind(ROOT / filename)
+            audit.check("replay_source_identity:" + filename, code.get(filename) == local_hash)
+            if code.get(filename) != local_hash:
+                raise ValueError("Local replay source is not the collection's frozen source: " + filename)
         result["counts"] = collection["counts"]
         result["source_integrity_scope"] = "Saved before/after hashes compared; unavailable remote absolute paths are not re-read."
         for job in cm["requests"]:

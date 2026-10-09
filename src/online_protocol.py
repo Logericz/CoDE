@@ -9,6 +9,9 @@ The caller owns token generation, candidate detection, KV/RNG isolation, timing,
 and natural/forced finalization. In particular it must resolve the documented
 Wait/EOS/think/budget boundaries before submitting observations here. Token
 position zero is rejected, not silently shifted to make the score well-defined.
+
+各方法的探测间隔实现位于 online_methods/；本文件保留共同数据类型、
+停止规则及观测历史。阅读顺序见 online_methods/README.md。
 """
 
 from __future__ import annotations
@@ -340,6 +343,9 @@ probe. Calls after a stopping decision or at an unscheduled candidate are errors
         if schedule.kind != "random" and seed_schedule is not None:
             raise ProtocolError("seed_schedule applies only to the random family")
         self.config, self.schedule = config, schedule
+        # 方法模块使用本文件的数据类型；延迟到构造时导入，避免循环初始化。
+        from online_methods import scheduler_for
+        self._choose_next = scheduler_for(schedule.kind)
         self.seed_schedule = seed_schedule
         self._rng = random.Random(seed_schedule) if schedule.kind == "random" else None
         self._history: list[ValidObservation] = []
@@ -399,6 +405,8 @@ For an invalid observation D_observed is None, not a newly computed D nor a
 stale D advertised as a current measurement. The previous valid score remains
 in history for the next valid signal difference.
 """
+        from online_methods.common import ScheduleContext
+
         _positive_int(token_position, "token_position")
         if self._last_token_position is not None and token_position <= self._last_token_position:
             raise ProtocolError("queried token positions must be strictly increasing")
@@ -427,48 +435,17 @@ in history for the next valid signal difference.
         if reasons and self.stop_enabled:
             self._next_j = None
         else:
-            if not observation.confidence_valid:
-                forced.append("invalid_probe")
-            if len(self._history) < WARMUP_VALID_COUNT:
-                forced.append("fewer_than_three_valid_observations")
-            if (not observation.ended_with_think
-                    and self.schedule.kind in ("adaptive", "backoff")):
-                forced.append("incomplete_probe")
-            if self.schedule.kind == "adaptive":
-                if timing_diagnostics or rho is None or not math.isfinite(rho):
-                    forced.append("timing_state_unavailable_or_invalid")
-                if previous is None or not observation.confidence_valid:
-                    forced.append("signal_state_unavailable")
-                elif observation.confidence_raw < previous.confidence:
-                    forced.append("confidence_decline")
-            if forced:
-                h_next = 1
-            elif self.schedule.kind == "dense":
-                h_next = 1
-            elif self.schedule.kind == "fixed":
-                h_next = self.schedule.fixed_interval
-            elif self.schedule.kind == "log":
-                h_next = min(max(math.ceil(self.schedule.log_a * math.log1p(candidate_j)), 1),
-                             self.schedule.h_max)
-            elif self.schedule.kind == "random":
-                h_next = capped_geometric_interval(self.schedule.random_p, self._rng)
-            elif self.schedule.kind == "backoff":
-                log_decline = math.log(max(observation.confidence_raw, EPSILON)) < math.log(
-                    max(previous.confidence, EPSILON))
-                if observation.confidence_raw >= threshold - self.schedule.margin_m0 or log_decline:
-                    h_next = 1
-                    forced.append("backoff_near_boundary_or_log_decline")
-                else:
-                    h_next = min(2 * self._backoff_interval, self.schedule.h_max)
-            else:
-                margin = min(max(threshold - observation.confidence_raw, 0),
-                             max(1 - score / self.config.tau, 0))
-                activity = max(abs(observation.confidence_raw - previous.confidence) / signal_delta,
-                               max(score - previous.D_observed, 0) / (self.config.tau * signal_delta),
-                               ACTIVITY_FLOOR)
-                h_signal = min(max(math.floor(margin / activity), 1), self.schedule.h_max)
-                h_cost = min(max(math.ceil(rho / self.schedule.beta), 1), self.schedule.h_max)
-                h_next = min(h_signal, h_cost, self.schedule.h_max)
+            # 停止判断已完成。方法只决定下次探测间隔，不能读取未来观测。
+            schedule_result = self._choose_next(ScheduleContext(
+                candidate_j=candidate_j, observation=observation, previous=previous,
+                valid_history_count=len(self._history), threshold_r=threshold,
+                score=score, signal_delta_j=signal_delta, rho=rho,
+                timing_diagnostics=timing_diagnostics, protocol=self.config,
+                schedule=self.schedule, previous_interval=self._backoff_interval, rng=self._rng))
+            h_next = schedule_result.h_next
+            forced = list(schedule_result.forced_dense_reasons)
+            margin, activity = schedule_result.margin_m, schedule_result.activity_u
+            h_signal, h_cost = schedule_result.h_signal, schedule_result.h_cost
             self._backoff_interval = h_next
             self._next_j = candidate_j + h_next
         return Decision(candidate_j, self._probe_count, token_position, observation, cost,

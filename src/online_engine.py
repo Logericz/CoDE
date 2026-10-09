@@ -26,6 +26,7 @@ from online_protocol import (
     MAX_PROBE_TOKENS, CostObservation, ProbeObservation, ProtocolConfig,
     ProtocolController, ScheduleConfig,
 )
+from online_methods import vanilla
 
 ENGINE_VERSION = "1.1.0"
 FINAL_TOKEN_CAP = 30
@@ -183,10 +184,10 @@ and must remain a diagnostic artifact, never an online-speed method result.
                 raise ValueError(f"{name} must be an integer >= {minimum}")
         if not isinstance(protocol_config, ProtocolConfig) or not isinstance(schedule_config, ScheduleConfig):
             raise ValueError("protocol_config and schedule_config must be their frozen dataclass types")
-        if method in ("vanilla", "dense_collect_no_stop") and schedule_config.kind != "dense":
+        if method == "vanilla":
+            controller = vanilla.create_controller(schedule_config, seed_schedule)
+        elif method == "dense_collect_no_stop" and schedule_config.kind != "dense":
             raise ValueError(f"{method} requires an explicit dense schedule")
-        if method == "vanilla" and seed_schedule is not None:
-            raise ValueError("vanilla has no schedule RNG")
         effective_protocol = replace(protocol_config, rule="deer" if method == "deer" else "codestop")
         if method != "vanilla":
             controller = ProtocolController(effective_protocol, schedule_config, seed_schedule=seed_schedule,

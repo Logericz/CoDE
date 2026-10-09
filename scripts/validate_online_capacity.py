@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from online_contract import MODEL_REVISION, RUNNER_PROTOCOL
 from online_engine import FINAL_TOKEN_CAP
 from online_protocol import MAX_PROBE_TOKENS
+from online_source_manifest import METHOD_IDENTITY_FILES
 from run_online_diagnostic import (
     EventLog, assert_gpu_idle, atomic_new, gpu_inventory, gpu_lock, sha256,
 )
@@ -36,7 +37,8 @@ MAIN_TOKEN_BUDGET = 32768
 REFERENCE_CONTRACT = "incremental_main_KV_pinned_original_probe_exact_v1"
 GATE_CASES = ("q001-probe-0", "q001-probe-1", "q002-probe-0", "q002-probe-1", "q002-probe-2")
 BRANCHES = ("actual_early_stop", "actual_natural_eos", "actual_answer_phase_budget")
-CRITICAL_SOURCES = ("src/online_contract.py", "src/online_protocol.py", "src/torch_online_backend.py")
+CRITICAL_SOURCES = ("src/online_contract.py", "src/online_protocol.py", "src/torch_online_backend.py",
+                    *METHOD_IDENTITY_FILES)
 SOURCE_FILES = ("scripts/validate_online_capacity.py", "scripts/validate_online_gpu.py",
                 "scripts/diagnose_probe_parity.py",
                 "scripts/run_online_diagnostic.py", "src/online_engine.py", *CRITICAL_SOURCES)

@@ -28,6 +28,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "src"))
 import validate_online_gpu as validation
+from online_source_manifest import METHOD_IDENTITY_FILES
 from run_online_diagnostic import assert_gpu_idle, atomic_new, gpu_inventory, gpu_lock
 
 CACHE_FILE = "cache_utils.py"
@@ -40,7 +41,8 @@ ENVIRONMENT_FIELDS = (
     "gpu_name", "driver_version", "snapshot_config_sha256", "tokenizer_sha256", "weight_shards",
     "markers", "sampling", "probe", "main_logits_to_keep", "context_limit",
 )
-CRITICAL_SOURCE_FILES = ("src/torch_online_backend.py", "src/online_contract.py", "src/online_protocol.py")
+CRITICAL_SOURCE_FILES = ("src/torch_online_backend.py", "src/online_contract.py", "src/online_protocol.py",
+                         *METHOD_IDENTITY_FILES)
 
 
 def cache_source(upstream_source_dir=None):

@@ -1,5 +1,10 @@
 # 有界共同在线入口与 GPU 验收
 
+2026-10-09 代码导航：四种方法已拆到 [src/online_methods/](../src/online_methods/README.md)，
+共同引擎与停止规则保持共享。部署时须包含新增目录及 `scripts/online_source_manifest.py`。
+源码哈希清单已更新；下文旧验收是旧 release 的历史证据，不能当作重构版的 GPU 验收。
+继续生成前重新建立当前源码的对应验收记录；不要改写旧 manifest 或冻结 release。
+
 范围：一题、一个 rollout，默认顺序运行 Vanilla / dense CoDE / fixed CoDE。默认使用已暴露的 pilot20 q002 (`math/train/geometry/428`)；首次主预算 1024 tokens，每次最终补答最多 30 tokens，每个 probe 最多 21 tokens。此入口最多允许 8192 主 tokens，不是论文完整矩阵或 32K 容量验收入口。
 
 新增可选配置为 `deer-dense`、`codestop-log`、`codestop-random`、`codestop-backoff`、`codestop-adaptive`、`dense-collect-no-stop`。默认配置不变；必须显式选择扩展配置。无早停密集采集记录 would-stop 后继续，不进入在线速度主表。随机日程使用独立派生种子，所有请求保存实际参数及 `config_hash`。probe 开始/结束为实时日志；`probe_decision` 标为 `post_request_summary`，在请求返回后输出。

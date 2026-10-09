@@ -30,8 +30,7 @@ class DenseAnalysisTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.old, self.new = self.root / "development", self.root / "collection"
         self.samples = [7, fixtures.WAIT, 8, fixtures.WAIT, fixtures.END, fixtures.VALUE, fixtures.WAIT, fixtures.EOS]
-        self.code = {k: analysis.sha256(ROOT / k) for k in
-                     ("src/online_engine.py", "src/online_protocol.py", "src/online_contract.py", "src/torch_online_backend.py")}
+        self.code = {k: analysis.sha256(ROOT / k) for k in analysis.CORE_SOURCE_FILES}
         self.questions = [{"development_id": f"dev{i:02d}", "original_id": f"synthetic/{i}"} for i in range(1, 11)]
         self.make_run(self.old, ("vanilla", "codestop-dense", "codestop-fixed", "codestop-adaptive"))
         self.make_run(self.new, (analysis.LABEL,))
@@ -169,6 +168,34 @@ class DenseAnalysisTests(unittest.TestCase):
         self.assertEqual(self.run_analysis()["status"], "failed")
         with self.assertRaises(ValueError):
             analysis.inside(self.new, "../outside.json")
+
+    def test_each_separated_method_source_must_match_local_replay_even_if_runs_agree(self):
+        original_old = json.loads((self.old / "manifest.json").read_text())
+        original_new = json.loads((self.new / "manifest.json").read_text())
+        for filename in analysis.METHOD_IDENTITY_FILES:
+            with self.subTest(filename=filename):
+                old, new = deepcopy(original_old), deepcopy(original_new)
+                old["code_sha256"][filename] = new["code_sha256"][filename] = "0" * 64
+                write(self.old / "manifest.json", old)
+                write(self.new / "manifest.json", new)
+                self.anchor()
+                result = self.run_analysis()
+                self.assertEqual(result["status"], "failed")
+                self.assertTrue(next(c["passed"] for c in result["checks"]
+                                     if c["check"] == "same_engine_backend_protocol"))
+                self.assertIn("replay_source_identity:" + filename,
+                              [c["check"] for c in result["failed_checks"]])
+
+    def test_legacy_manifest_missing_separated_sources_is_not_accepted_as_refactor_evidence(self):
+        for root in (self.old, self.new):
+            manifest = json.loads((root / "manifest.json").read_text())
+            for filename in analysis.METHOD_IDENTITY_FILES:
+                manifest["code_sha256"].pop(filename)
+            write(root / "manifest.json", manifest)
+        self.anchor()
+        result = self.run_analysis()
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("same_engine_backend_protocol", [c["check"] for c in result["failed_checks"]])
 
     def test_nonfinite_is_invalid_and_not_replaced_by_confidence(self):
         p = {"candidate_j": 1, "token_position": 1, "probe_elapsed_ms": 5.0,

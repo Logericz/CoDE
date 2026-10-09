@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from online_contract import MODEL_ID, MODEL_REVISION, RUNNER_PROTOCOL
 from online_engine import RequestError, json_safe, run_request
 from online_protocol import ProtocolConfig, ScheduleConfig
+from online_source_manifest import METHOD_IDENTITY_FILES
 
 SCOPE = "single_question_development_gpu_acceptance_not_benchmark"
 DEFAULT_SAMPLE = "math/train/geometry/428"  # Already exposed pilot20 q002.
@@ -41,7 +42,7 @@ SUPPORTED_CONFIGS = DEFAULT_CONFIGS + (
     "codestop-adaptive", "dense-collect-no-stop")
 CODE_FILES = ("scripts/run_online_diagnostic.py", "src/online_contract.py",
               "src/online_engine.py", "src/online_protocol.py", "src/torch_online_backend.py",
-              "src/math_grading.py", "scripts/grade_math_answers.py")
+              "src/math_grading.py", "scripts/grade_math_answers.py", *METHOD_IDENTITY_FILES)
 
 
 def sha256(path):

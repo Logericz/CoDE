@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 from online_contract import MODEL_REVISION
 from online_protocol import MAX_PROBE_TOKENS, UPSTREAM_COMMIT
+from online_source_manifest import METHOD_IDENTITY_FILES
 from run_online_diagnostic import assert_gpu_idle, atomic_new, gpu_inventory, gpu_lock
 
 REFERENCE_FILE = "method_codestop.py"
@@ -36,6 +37,9 @@ REFERENCE_SHA256 = "d020fde481bf1ad2d4ee53ea43a3ae31560e05be1d6cf6f172489b54179c
 DEFAULT_PREFIXES = ("q001:0", "q001:1", "q002:0")
 TOLERANCE = {"atol": 0.0, "rtol": 0.0, "equal_nan": True,
              "policy": "exact; preserve first difference and stop; no dtype/attention fallback"}
+SOURCE_FILES = ("scripts/validate_online_gpu.py", "src/torch_online_backend.py",
+                "src/online_contract.py", "src/online_protocol.py",
+                "scripts/run_online_diagnostic.py", *METHOD_IDENTITY_FILES)
 
 
 def sha(data):
@@ -420,9 +424,7 @@ def main(argv=None):
     with fresh_run(args.run_root) as run_root:
         write_json(run_root / "plan.json", plan)
         write_json(run_root / "inputs.json", cases)
-        source_paths = [Path(__file__), ROOT / "src" / "torch_online_backend.py",
-                        ROOT / "src" / "online_contract.py", ROOT / "src" / "online_protocol.py",
-                        ROOT / "scripts" / "run_online_diagnostic.py"]
+        source_paths = [ROOT / name for name in SOURCE_FILES]
         write_json(run_root / "source-hashes.json", {str(path.relative_to(ROOT)): sha(path.read_bytes())
                                                    for path in source_paths})
         (run_root / "pinned-reference.py").write_bytes(raw_reference)

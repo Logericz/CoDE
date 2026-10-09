@@ -23,6 +23,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "src"))
 from online_contract import MODEL_ID, MODEL_REVISION, RUNNER_PROTOCOL
 from online_engine import FINAL_TOKEN_CAP, RequestError, run_request
+from online_source_manifest import METHOD_IDENTITY_FILES
 from run_online_diagnostic import EventLog, ProgressBackend, assert_gpu_idle, atomic_new, gpu_inventory, gpu_lock, sha256
 from validate_online_gpu import fresh_run, first_difference
 
@@ -34,7 +35,7 @@ LABELS = ("natural-eos", "natural-answer-budget", "natural-answer-body-budget")
 BRANCHES = ("actual_natural_eos", "actual_answer_phase_budget", "actual_nonempty_answer_phase_budget")
 SOURCE_FILES = ("scripts/validate_online_boundaries.py", "scripts/run_online_diagnostic.py",
                 "scripts/validate_online_gpu.py", "src/online_contract.py", "src/online_engine.py",
-                "src/online_protocol.py", "src/torch_online_backend.py")
+                "src/online_protocol.py", "src/torch_online_backend.py", *METHOD_IDENTITY_FILES)
 
 
 class CoverageUnmet(RuntimeError):
