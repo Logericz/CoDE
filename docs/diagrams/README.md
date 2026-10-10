@@ -20,6 +20,8 @@
 
 ## 图的边界与源码细节
 
+2026-10-10新增：[CoDE主函数完整流程图](method-codestop/README.md)，对应用户确认10/9完成的阅读。包含两条停止分支、rollback、计数与返回/保存边界；放在10/9笔记旁，10/10复习引用原页。
+
 2026-10-07新增：[置信度辅助函数的完整循环与算例两张图](confidence-probe/README.md)，对应D4的 `calcu_max_probs_w_kv()`。图说明首尾概率、分母与短试答边界，保留阅读与真实运行验收的区别。
 
 - 前四图依据当前本地上游带注释工作树，后三图依据当前教学封装和已学命令。文件指纹见 [source-audit.json](code-reading/source-audit.json)。上游注释未在本次修改或提交。

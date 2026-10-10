@@ -1,0 +1,36 @@
+digraph G {
+graph [rankdir=TB, bgcolor="#F8FAFC", pad=0.35, nodesep=0.32, ranksep=0.35, fontname="PingFang SC", fontsize=25, fontcolor="#0F172A", labelloc=t, label="CoDE-Stop 主函数：检查、停止、回退与返回\n源码复习图 · 2026-10-10"];
+node [shape=box, style="rounded,filled", fontname="PingFang SC", fontsize=17, fontcolor="#0F172A", penwidth=1.4, margin="0.18,0.12"];
+edge [color="#64748B", penwidth=1.4, arrowsize=0.7, fontname="PingFang SC", fontsize=14, fontcolor="#475569"];
+a [label="输入：模型、分词器、题目、已有回答与方法参数", shape=box, fillcolor="#E0F2FE", color="#0284C7"];
+b [label="构造题目与答案前缀，定位旧回答的候选检查点\nstop_word 编码后的各 token ID + EOS ID", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+c [label="还有检查点？", shape=diamond, fillcolor="#FEF3C7", color="#D97706"];
+d [label="准备本次试答\ncp_cache=True：更新前缀KV，传试答前缀与缓存\nFalse：完整题目 + 保留推理 + 试答前缀", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+e [label="调用 calcu_max_probs_w_kv()\n得到试答、概率、分数、结束标记；加入 prob_checks", shape=box, fillcolor="#EDE9FE", color="#8B5CF6"];
+f [label="计算退化分数与有效置信度阈值\n不足3个检查点：退化分数为0\n启用ramp：阈值使用检查点序号i，否则固定阈值", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+g [label="两条停止分支取或\n置信度分支：(不要求ewt 或结束标记满足) 且分数 > 有效阈值\n退化分支：退化分数 > 退化阈值（独立于ewt）", shape=box, fillcolor="#EDE9FE", color="#8B5CF6"];
+h [label="任一分支满足？", shape=diamond, fillcolor="#FEF3C7", color="#D97706"];
+i [label="选定答案位置\nrollback=True：已检查记录中置信度最高的位置\nFalse：当前检查位置", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+j [label="拼正式生成输入：题目 + 选定位置前推理 + 正式前缀\n回退到不同位置：不传当前检查点KV\n未实际回退：按cp_cache决定传KV或None", shape=box, fillcolor="#FFFFFF", color="#CBD5E1"];
+k [label="另行调用 model.generate() 生成最终答案\n切掉题目后decode；统计 response_tokens 与 work", shape=box, fillcolor="#EDE9FE", color="#8B5CF6"];
+l [label="返回字典：stopped_early=True\nresponse、prob_checks、阈值、计数、原回答、rollback_used", shape=box, fillcolor="#DCFCE7", color="#16A34A"];
+m [label="返回原回答与检查记录：stopped_early=False\nwork = 原回答重编码长度 + 全部试答token数\n也覆盖没有检查点的情况", shape=box, fillcolor="#DCFCE7", color="#16A34A"];
+n [label="函数只返回；外层负责判分与保存\n官方 inference.py：生成 → 判分 → JSONL\n教学封装的文件格式与保存顺序另行核对", shape=box, fillcolor="#F1F5F9", color="#64748B"];
+o [label="早停 work 用当前检查位置，不用回退后位置\n再加正式前缀、新生成答案、全部试答token\n这是实现计数，不等于完整计算量或实测耗时", shape=box, fillcolor="#F1F5F9", color="#64748B"];
+a -> b [label=""];
+b -> c [label=""];
+c -> d [label="有"];
+d -> e [label=""];
+e -> f [label=""];
+f -> g [label=""];
+g -> h [label=""];
+h -> c [label="否，下一检查点"];
+h -> i [label="是"];
+i -> j [label=""];
+j -> k [label=""];
+k -> l [label=""];
+c -> m [label="无"];
+l -> n [label=""];
+m -> n [label=""];
+n -> o [label=""];
+}
